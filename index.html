@@ -30,7 +30,10 @@
     background-image:radial-gradient(ellipse at 50% 0%,#164534 0%,var(--felt) 70%);
     min-height:100vh;font-family:var(--sans);color:var(--ink);
   }
-  #app{max-width:560px;margin:0 auto;padding:14px 8px 190px}
+  #app{
+    max-width:560px;margin:0 auto;
+    padding:calc(14px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-left)) 190px calc(8px + env(safe-area-inset-right));
+  }
 
   /* ---------- the paper card ---------- */
   .paper{
