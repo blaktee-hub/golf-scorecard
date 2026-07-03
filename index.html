@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scorecard">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Golf Scorecard</title>
+<style>
+  :root{
+    --paper:#F7F1E0;
+    --paper-dk:#EFE7CF;
+    --ink:#1F5138;          /* printed green ink */
+    --ink-lt:#5E7A66;
+    --pencil:#38393B;       /* graphite */
+    --under:#B5342A;        /* red = under par */
+    --gold:#C9A227;
+    --felt:#0E2E20;         /* table felt behind the card */
+    --print:"Iowan Old Style","Palatino","Georgia",serif;
+    --hand:"Bradley Hand","Marker Felt","Noteworthy","Segoe Print","Comic Sans MS",cursive;
+    --sans:-apple-system,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--felt);
+    background-image:radial-gradient(ellipse at 50% 0%,#164534 0%,var(--felt) 70%);
+    min-height:100vh;font-family:var(--sans);color:var(--ink);
+  }
+  #app{max-width:560px;margin:0 auto;padding:14px 8px 190px}
+
+  /* ---------- the paper card ---------- */
+  .paper{
+    background:var(--paper);
+    background-image:linear-gradient(180deg,rgba(255,255,255,.35),rgba(0,0,0,0) 60px);
+    border:1px solid #D9CFAF;
+    border-radius:6px;
+    box-shadow:0 6px 22px rgba(0,0,0,.45);
+    padding:14px 10px 16px;
+  }
+  .cardhead{text-align:center;border-bottom:3px double var(--ink);padding-bottom:10px;margin:0 4px 12px}
+  .cardhead .club{
+    font-family:var(--print);font-size:21px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink);text-wrap:balance;
+  }
+  .cardhead .sub{
+    font-family:var(--print);font-style:italic;font-size:13px;color:var(--ink-lt);margin-top:3px;
+  }
+  .cardhead .dateline{
+    display:flex;justify-content:center;gap:18px;margin-top:8px;
+    font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-lt);
+  }
+  .cardhead .dateline b{font-family:var(--hand);font-size:14px;letter-spacing:0;text-transform:none;color:var(--pencil);font-weight:400}
+
+  .ninelabel{
+    font-family:var(--print);font-size:12px;font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--ink);margin:14px 4px 5px;
+  }
+
+  /* ---------- scorecard grid ---------- */
+  .gridwrap{overflow-x:auto}
+  table.sc{border-collapse:collapse;width:100%;table-layout:fixed}
+  table.sc th,table.sc td{
+    border:1px solid var(--ink);
+    height:36px;padding:0;text-align:center;vertical-align:middle;
+    font-variant-numeric:tabular-nums;
+  }
+  table.sc col.lbl{width:58px}
+  table.sc col.tot{width:36px}
+  table.sc th{
+    background:var(--ink);color:var(--paper);
+    font-family:var(--print);font-size:11px;font-weight:700;letter-spacing:.04em;
+  }
+  table.sc th.lblh{font-size:9px;letter-spacing:.12em}
+  td.rowlbl{
+    background:var(--paper-dk);
+    font-family:var(--print);font-size:10.5px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;
+  }
+  td.scell{cursor:pointer;background:var(--paper)}
+  td.scell:active{background:#EDE4C8}
+  td.sumcell{background:var(--paper-dk);font-weight:700}
+
+  /* penciled-in numbers */
+  .pen{
+    font-family:var(--hand);font-size:19px;color:var(--pencil);font-weight:400;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:26px;height:26px;
+  }
+  .pen.sum{font-size:17px}
+  /* scorecard notation: circle under par, square over par */
+  .pen.birdie{border:1.8px solid var(--under);border-radius:50%;color:var(--under)}
+  .pen.eagle{border:1.8px solid var(--under);border-radius:50%;color:var(--under);
+    box-shadow:0 0 0 2px var(--paper),0 0 0 3.5px var(--under)}
+  .pen.bogey{border:1.8px solid var(--pencil);border-radius:4px}
+  .pen.dbl{border:1.8px solid var(--pencil);border-radius:4px;
+    box-shadow:0 0 0 2px var(--paper),0 0 0 3.5px var(--pencil)}
+
+  /* printed par row (from a known course) */
+  tr.parrow td{
+    background:var(--paper-dk);height:26px;
+    font-family:var(--print);font-size:13px;font-weight:700;color:var(--ink);
+  }
+
+  /* course quick-pick chips */
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0}
+  .chips button{
+    padding:6px 10px;font-family:var(--print);font-size:12px;font-weight:700;
+    background:var(--paper);border:1.5px solid var(--ink);border-radius:999px;
+    color:var(--ink);cursor:pointer;
+  }
+  .chips button.on{background:var(--ink);color:var(--paper)}
+
+  /* to-par line — same cell size as the score row */
+  tr.topar td{background:var(--paper)}
+  tr.topar td.rowlbl{font-size:9px}
+  .tp{font-family:var(--hand);font-size:17px;color:var(--pencil)}
+  .tp.u{color:var(--under)}
+
+  td.sel{outline:3px solid var(--gold);outline-offset:-3px}
+
+  .legend{
+    display:flex;gap:16px;justify-content:center;flex-wrap:wrap;
+    margin-top:14px;font-family:var(--print);font-style:italic;font-size:12px;color:var(--ink-lt);
+  }
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend .pen{font-size:12px;min-width:18px;height:18px}
+
+  .winner{
+    text-align:center;font-family:var(--print);font-size:16px;color:var(--ink);
+    border:1.5px solid var(--ink);border-radius:6px;padding:9px;margin-bottom:12px;
+    background:var(--paper-dk);
+  }
+
+  .cardfoot{display:flex;gap:10px;margin-top:16px}
+  .ghost{
+    flex:1;padding:12px;background:transparent;color:var(--ink);
+    font-family:var(--print);font-size:14px;font-weight:700;letter-spacing:.04em;
+    border:1.5px solid var(--ink);border-radius:8px;cursor:pointer;
+  }
+  button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+  /* ---------- setup ---------- */
+  .setup label{
+    display:block;font-family:var(--print);font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink);margin:12px 2px 4px;
+  }
+  .setup input[type=text]{
+    width:100%;padding:8px 8px;font-size:16px;color:var(--pencil);
+    font-family:var(--hand);
+    border:none;border-bottom:1.5px solid var(--ink);border-radius:0;
+    background:transparent;
+  }
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+  .setup input::placeholder{color:#B9AE8D;font-family:var(--sans);font-size:14px}
+  .seg{display:flex;border:1.5px solid var(--ink);border-radius:8px;overflow:hidden;background:var(--paper)}
+  .seg button{
+    flex:1;padding:10px 0;font-family:var(--print);font-size:15px;font-weight:700;
+    background:transparent;color:var(--ink);border:none;cursor:pointer;
+  }
+  .seg button.on{background:var(--ink);color:var(--paper)}
+  .primary{
+    display:block;width:100%;margin-top:14px;padding:13px;
+    background:var(--ink);color:var(--paper);font-family:var(--print);
+    font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    border:none;border-radius:8px;cursor:pointer;
+  }
+  .resume{
+    display:block;width:100%;margin-top:10px;padding:13px;
+    background:transparent;color:var(--ink);font-family:var(--print);font-size:14px;font-weight:700;
+    border:1.5px solid var(--ink);border-radius:8px;cursor:pointer;
+  }
+  .hint{font-size:12px;color:#A8C4B2;text-align:center;margin:14px 10px 0;line-height:1.5}
+
+  /* ---------- number pad ---------- */
+  #pad{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    transform:translateY(110%);transition:transform .18s ease-out;
+    background:var(--paper);border-top:3px double var(--ink);
+    box-shadow:0 -6px 24px rgba(0,0,0,.45);
+    padding:10px 12px calc(12px + env(safe-area-inset-bottom));
+    max-width:560px;margin:0 auto;
+  }
+  #pad.open{transform:none}
+  @media (prefers-reduced-motion:reduce){#pad{transition:none}}
+  #padctx{
+    text-align:center;font-family:var(--print);font-size:13px;font-weight:700;
+    letter-spacing:.06em;color:var(--ink);margin-bottom:8px;
+  }
+  .padgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+  .padgrid button{
+    height:50px;font-size:21px;font-weight:600;font-family:var(--sans);
+    background:#fff;border:1.5px solid var(--ink);border-radius:8px;color:var(--pencil);cursor:pointer;
+  }
+  .padgrid button:active{background:var(--paper-dk)}
+  /* to-par pad */
+  .tpgrid{display:none;grid-template-columns:repeat(7,1fr);gap:6px}
+  .tpgrid button{
+    height:48px;font-size:17px;font-weight:600;font-family:var(--sans);
+    background:#fff;border:1.5px solid var(--ink);border-radius:8px;color:var(--pencil);cursor:pointer;
+  }
+  .tpgrid button.neg{color:var(--under);border-color:var(--under)}
+  .tpgrid button:active{background:var(--paper-dk)}
+  #pad.tpmode .padgrid{display:none}
+  #pad.tpmode .tpgrid{display:grid}
+  .padrow{display:flex;gap:7px;margin-top:7px}
+  .padrow button{
+    flex:1;height:46px;font-family:var(--print);font-size:14px;font-weight:700;
+    letter-spacing:.06em;border-radius:8px;cursor:pointer;
+  }
+  #padclear{background:transparent;border:1.5px solid var(--under);color:var(--under)}
+  #paddone{background:var(--ink);border:1.5px solid var(--ink);color:var(--paper)}
+</style>
+
+</head>
+<body>
+<div id="app"></div>
+<div id="pad" aria-hidden="true">
+  <div id="padctx"></div>
+  <div class="padgrid" id="padnums"></div>
+  <div class="tpgrid" id="padtp"></div>
+  <div class="padrow">
+    <button id="padclear">Erase</button>
+    <button id="paddone">Close</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var KEY='golf-scorecard-v1';
+  var S=null;
+  var sel=null; /* {kind:'score'|'topar',pi,h} — not persisted */
+
+  /* hole-by-hole pars from the official City of Idaho Falls scorecards (golfif.com) */
+  var COURSES=[
+    {name:'Sand Creek',      pars:[4,5,4,4,4,5,3,4,3, 4,5,4,3,4,4,3,4,5]},
+    {name:'Pinecrest',       pars:[4,4,5,4,3,5,3,4,4, 3,5,3,4,4,4,3,4,4]},
+    {name:'Sage Lakes',      pars:[4,4,3,4,4,3,5,3,5, 5,4,3,4,3,4,5,3,4]},
+    {name:'Teton Lakes N/S', pars:[4,3,5,3,5,3,4,4,5, 5,4,3,4,4,5,4,3,4]},
+    {name:'Blackfoot',       pars:[5,4,4,4,3,5,3,4,4, 3,4,5,4,5,4,3,4,4]}
+  ];
+  function findCourse(n){
+    if(!n)return null;
+    n=n.toLowerCase().trim();
+    for(var i=0;i<COURSES.length;i++){
+      var c=COURSES[i].name.toLowerCase();
+      if(n===c||n.indexOf(c)>=0||(n.length>=4&&c.indexOf(n)>=0))return COURSES[i];
+    }
+    return null;
+  }
+
+  function load(){try{var r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);}catch(e){S=null;}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+  function normalize(st){
+    if(!st||!st.players)return st;
+    st.players.forEach(function(p){
+      if(!p.topar)p.topar=p.scores.map(function(){return null;});
+    });
+    return st;
+  }
+
+  /* notation from the player's own to-par entry for that hole */
+  function relClass(score,tp){
+    if(score===1)return'eagle';
+    if(tp==null)return'';
+    if(tp<=-2)return'eagle';
+    if(tp===-1)return'birdie';
+    if(tp===1)return'bogey';
+    if(tp>=2)return'dbl';
+    return'';
+  }
+  function fmtVs(vs){return vs===0?'E':(vs>0?'+':'')+vs;}
+
+  function segSum(arr,from,to){
+    var s=0,any=false;
+    for(var h=from;h<to;h++){if(arr[h]!=null){s+=arr[h];any=true;}}
+    return any?s:null;
+  }
+  function totals(pi){
+    var p=S.players[pi];
+    return{
+      strokes:segSum(p.scores,0,S.holes),
+      vs:segSum(p.topar,0,S.holes),
+      thru:p.scores.filter(function(v){return v!=null;}).length
+    };
+  }
+
+  /* ---------- setup ---------- */
+  function renderSetup(){
+    var app=document.getElementById('app');
+    var saved=null;
+    try{var raw=localStorage.getItem(KEY);if(raw)saved=normalize(JSON.parse(raw));}catch(e){}
+    var resume='';
+    if(saved&&saved.players&&saved.players.some(function(p){return p.scores.some(function(x){return x!=null;});})){
+      resume='<button class="resume" id="resumeBtn">Resume round in progress</button>';
+    }
+    var inputs='<div class="pgrid">';
+    for(var i=0;i<6;i++){
+      inputs+='<input type="text" id="pn'+i+'" maxlength="14" placeholder="Player '+(i+1)+'">';
+    }
+    inputs+='</div>';
+    app.innerHTML=
+      '<div class="paper setup">'+
+        '<div class="cardhead">'+
+          '<div class="club">Official Scorecard</div>'+
+        '</div>'+
+        '<label>Course</label>'+
+        '<input type="text" id="course" maxlength="30" placeholder="Type a course, or tap one below">'+
+        '<div class="chips">'+
+          COURSES.map(function(c,i){return'<button data-ci="'+i+'">'+c.name+'</button>';}).join('')+
+        '</div>'+
+        '<label>Players</label>'+inputs+
+        '<label>Holes</label>'+
+        '<div class="seg"><button id="h9">9 Holes</button><button id="h18" class="on">18 Holes</button></div>'+
+        '<button class="primary" id="startBtn">Tee Off</button>'+resume+
+      '</div>'+
+      '<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>';
+    app.style.paddingBottom='10px';
+
+    var chipBtns=app.querySelectorAll('.chips button');
+    for(var cb=0;cb<chipBtns.length;cb++){
+      chipBtns[cb].onclick=function(){
+        var c=COURSES[parseInt(this.getAttribute('data-ci'),10)];
+        document.getElementById('course').value=c.name;
+        for(var k=0;k<chipBtns.length;k++)chipBtns[k].classList.remove('on');
+        this.classList.add('on');
+      };
+    }
+
+    var holes=18;
+    document.getElementById('h9').onclick=function(){holes=9;this.classList.add('on');document.getElementById('h18').classList.remove('on');};
+    document.getElementById('h18').onclick=function(){holes=18;this.classList.add('on');document.getElementById('h9').classList.remove('on');};
+    document.getElementById('startBtn').onclick=function(){
+      var names=[];
+      for(var i=0;i<6;i++){var v=document.getElementById('pn'+i).value.trim();if(v)names.push(v);}
+      if(names.length===0)names=['Player 1'];
+      var d=new Date();
+      var courseName=document.getElementById('course').value.trim();
+      var known=findCourse(courseName);
+      S={holes:holes,course:courseName,
+         coursePars:known?known.pars.slice(0,holes):null,
+         date:(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(),
+         players:names.map(function(n){return{
+           name:n,
+           scores:Array.apply(null,Array(holes)).map(function(){return null;}),
+           topar:Array.apply(null,Array(holes)).map(function(){return null;})
+         };})};
+      save();render();
+    };
+    var rb=document.getElementById('resumeBtn');
+    if(rb)rb.onclick=function(){S=saved;render();};
+  }
+
+  /* ---------- one nine-hole grid ---------- */
+  function nineTable(from,to,label,withTotal){
+    var n=to-from;
+    var cols='<col class="lbl">';
+    for(var c=0;c<n;c++)cols+='<col>';
+    cols+='<col class="tot">'+(withTotal?'<col class="tot">':'');
+
+    var head='<tr><th class="lblh">Hole</th>';
+    for(var h=from;h<to;h++)head+='<th>'+(h+1)+'</th>';
+    head+='<th>'+label+'</th>'+(withTotal?'<th>Tot</th>':'')+'</tr>';
+
+    /* printed par row when the course is known */
+    var parRow='';
+    if(S.coursePars){
+      parRow='<tr class="parrow"><td class="rowlbl">Par</td>';
+      var ps=0,pa=0;
+      for(var hp=from;hp<to;hp++){parRow+='<td>'+S.coursePars[hp]+'</td>';ps+=S.coursePars[hp];}
+      for(var hq=0;hq<S.holes;hq++)pa+=S.coursePars[hq];
+      parRow+='<td>'+ps+'</td>'+(withTotal?'<td>'+pa+'</td>':'')+'</tr>';
+    }
+
+    var rows='';
+    for(var pi=0;pi<S.players.length;pi++){
+      var p=S.players[pi];
+      /* strokes row */
+      rows+='<tr><td class="rowlbl">'+esc(p.name)+'</td>';
+      for(var h4=from;h4<to;h4++){
+        var v=p.scores[h4];
+        rows+='<td class="scell'+selCls('score',pi,h4)+'" data-kind="score" data-p="'+pi+'" data-h="'+h4+'">'+
+          (v==null?'':'<span class="pen '+relClass(v,p.topar[h4])+'">'+v+'</span>')+'</td>';
+      }
+      var ss=segSum(p.scores,from,to);
+      rows+='<td class="sumcell">'+(ss==null?'':'<span class="pen sum">'+ss+'</span>')+'</td>';
+      if(withTotal){
+        var ts=segSum(p.scores,0,S.holes);
+        rows+='<td class="sumcell">'+(ts==null?'':'<span class="pen sum">'+ts+'</span>')+'</td>';
+      }
+      rows+='</tr>';
+      /* to-par row — auto-computed when the course is known, otherwise tappable */
+      rows+='<tr class="topar"><td class="rowlbl">+/&minus;</td>';
+      for(var h5=from;h5<to;h5++){
+        var tp=p.topar[h5];
+        var inner=(tp==null?'':'<span class="tp '+(tp<0?'u':'')+'">'+fmtVs(tp)+'</span>');
+        rows+=S.coursePars
+          ?'<td>'+inner+'</td>'
+          :'<td class="scell'+selCls('topar',pi,h5)+'" data-kind="topar" data-p="'+pi+'" data-h="'+h5+'">'+inner+'</td>';
+      }
+      var sv=segSum(p.topar,from,to);
+      rows+='<td class="sumcell">'+(sv==null?'':'<span class="tp '+(sv<0?'u':'')+'">'+fmtVs(sv)+'</span>')+'</td>';
+      if(withTotal){
+        var tv=segSum(p.topar,0,S.holes);
+        rows+='<td class="sumcell">'+(tv==null?'':'<span class="tp '+(tv<0?'u':'')+'">'+fmtVs(tv)+'</span>')+'</td>';
+      }
+      rows+='</tr>';
+    }
+    return'<div class="gridwrap"><table class="sc"><colgroup>'+cols+'</colgroup>'+head+parRow+rows+'</table></div>';
+  }
+  function selCls(kind,pi,h){
+    return(sel&&sel.kind===kind&&sel.pi===pi&&sel.h===h)?' sel':'';
+  }
+
+  /* ---------- card ---------- */
+  function renderCard(){
+    var app=document.getElementById('app');
+    app.style.paddingBottom='';
+
+    var winner='';
+    if(S.players.length>1){
+      var res=S.players.map(function(p,i){return{name:p.name,t:totals(i)};});
+      if(res.every(function(r){return r.t.thru===S.holes;})){
+        var best=res.slice().sort(function(a,b){return a.t.strokes-b.t.strokes;});
+        var tied=best.filter(function(r){return r.t.strokes===best[0].t.strokes;});
+        winner='<div class="winner">'+(tied.length>1
+          ?'All square &mdash; '+tied.map(function(r){return esc(r.name);}).join(' &amp; ')+' at '+best[0].t.strokes
+          :'&#127942; '+esc(best[0].name)+' takes it: '+best[0].t.strokes+
+            (best[0].t.vs!=null?' ('+fmtVs(best[0].t.vs)+')':''))+'</div>';
+      }
+    }
+
+    var grids;
+    if(S.holes===18){
+      grids='<div class="ninelabel">Front Nine</div>'+nineTable(0,9,'Out',false)+
+            '<div class="ninelabel">Back Nine</div>'+nineTable(9,18,'In',true);
+    }else{
+      grids='<div class="ninelabel">Front Nine</div>'+nineTable(0,9,'Tot',false);
+    }
+
+    app.innerHTML=
+      '<div class="paper">'+
+        '<div class="cardhead">'+
+          '<div class="club">'+(S.course?esc(S.course):'Official Scorecard')+'</div>'+
+          (S.course?'<div class="sub">Official Scorecard</div>':'')+
+          '<div class="dateline"><span>Date&nbsp;<b>'+esc(S.date||'')+'</b></span><span>Holes&nbsp;<b>'+S.holes+'</b></span></div>'+
+        '</div>'+
+        winner+grids+
+        '<div class="legend">'+
+          '<span><span class="pen birdie">3</span> under par</span>'+
+          '<span><span class="pen bogey">5</span> over par</span>'+
+          '<span>tap any square to score</span>'+
+        '</div>'+
+        '<div class="cardfoot"><button class="ghost" id="newBtn">New Round</button></div>'+
+      '</div>';
+
+    /* confirm() is blocked inside the artifact page, so confirm with a second tap */
+    var newBtn=document.getElementById('newBtn');
+    newBtn.onclick=function(){
+      if(!newBtn.dataset.armed){
+        newBtn.dataset.armed='1';
+        newBtn.textContent='Tap again to erase this card';
+        newBtn.style.borderColor='var(--under)';newBtn.style.color='var(--under)';
+        setTimeout(function(){
+          if(newBtn.isConnected){
+            delete newBtn.dataset.armed;
+            newBtn.textContent='New Round';
+            newBtn.style.borderColor='';newBtn.style.color='';
+          }
+        },3500);
+        return;
+      }
+      try{localStorage.removeItem(KEY);}catch(e){}
+      S=null;sel=null;closePad();render();
+    };
+
+    var cells=app.querySelectorAll('[data-kind]');
+    for(var i=0;i<cells.length;i++){
+      cells[i].onclick=function(){
+        sel={kind:this.getAttribute('data-kind'),
+             pi:parseInt(this.getAttribute('data-p'),10),
+             h:parseInt(this.getAttribute('data-h'),10)};
+        render();openPad();
+      };
+    }
+    if(sel){
+      var el=app.querySelector('td.sel');
+      if(el&&el.scrollIntoView)el.scrollIntoView({block:'center',behavior:'auto'});
+    }
+  }
+
+  function render(){
+    if(!S){renderSetup();closePad();return;}
+    renderCard();
+  }
+
+  /* ---------- number pad ---------- */
+  var pad=document.getElementById('pad');
+  function padCtx(){
+    if(!sel)return'';
+    var base=esc(S.players[sel.pi].name)+' &mdash; Hole '+(sel.h+1);
+    return sel.kind==='topar'?base+' &middot; Score to par':base+' &middot; Strokes';
+  }
+  function openPad(){
+    if(!sel)return;
+    document.getElementById('padctx').innerHTML=padCtx();
+    pad.classList.toggle('tpmode',sel.kind==='topar');
+    pad.classList.add('open');pad.setAttribute('aria-hidden','false');
+  }
+  function closePad(){
+    pad.classList.remove('open');pad.setAttribute('aria-hidden','true');sel=null;
+  }
+  (function buildPad(){
+    var nums=document.getElementById('padnums'),html='';
+    for(var v=1;v<=12;v++)html+='<button data-v="'+v+'">'+v+'</button>';
+    nums.innerHTML=html;
+    var btns=nums.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      btns[i].onclick=function(){
+        if(!sel||sel.kind!=='score')return;
+        var v=parseInt(this.getAttribute('data-v'),10);
+        S.players[sel.pi].scores[sel.h]=v;
+        if(S.coursePars)S.players[sel.pi].topar[sel.h]=v-S.coursePars[sel.h];
+        save();closePad();render();
+      };
+    }
+    var tp=document.getElementById('padtp'),tphtml='';
+    for(var t=-4;t<=9;t++){
+      tphtml+='<button data-t="'+t+'"'+(t<0?' class="neg"':'')+'>'+(t===0?'E':(t>0?'+':'&minus;')+Math.abs(t))+'</button>';
+    }
+    tp.innerHTML=tphtml;
+    var tpbtns=tp.querySelectorAll('button');
+    for(var j=0;j<tpbtns.length;j++){
+      tpbtns[j].onclick=function(){
+        if(!sel||sel.kind!=='topar')return;
+        S.players[sel.pi].topar[sel.h]=parseInt(this.getAttribute('data-t'),10);
+        save();closePad();render();
+      };
+    }
+    document.getElementById('padclear').onclick=function(){
+      if(!sel)return;
+      if(sel.kind==='score'){
+        S.players[sel.pi].scores[sel.h]=null;
+        if(S.coursePars)S.players[sel.pi].topar[sel.h]=null;
+      }
+      else S.players[sel.pi].topar[sel.h]=null;
+      save();closePad();render();
+    };
+    document.getElementById('paddone').onclick=function(){closePad();render();};
+  })();
+
+  load();
+  S=normalize(S);
+  render();
+})();
+</script>
+</body>
+</html>
