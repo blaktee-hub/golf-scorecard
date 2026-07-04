@@ -126,6 +126,20 @@
 
   td.sel{outline:3px solid var(--gold);outline-offset:-3px}
 
+  /* wolf game */
+  th.wolfhead{cursor:pointer}
+  .wtag{display:block;font-size:8px;line-height:1.3;letter-spacing:.02em;opacity:.92;font-weight:700}
+  tr.ptsrow td{background:var(--paper)}
+  .ptv{font-family:var(--hand);font-size:16px;color:var(--ink)}
+  .wolfgrid{display:none;grid-template-columns:repeat(2,1fr);gap:7px}
+  .wolfgrid button{
+    height:50px;font-family:var(--print);font-size:15px;font-weight:700;
+    background:#fff;border:1.5px solid var(--ink);border-radius:8px;color:var(--ink);cursor:pointer;
+  }
+  .wolfgrid button.lone{border-color:var(--under);color:var(--under)}
+  #pad.wolfmode .padgrid{display:none}
+  #pad.wolfmode .wolfgrid{display:grid}
+
   .legend{
     display:flex;gap:16px;justify-content:center;flex-wrap:wrap;
     margin-top:14px;font-family:var(--print);font-style:italic;font-size:12px;color:var(--ink-lt);
@@ -226,6 +240,7 @@
   <div id="padctx"></div>
   <div class="padgrid" id="padnums"></div>
   <div class="tpgrid" id="padtp"></div>
+  <div class="wolfgrid" id="padwolf"></div>
   <div class="padrow">
     <button id="padclear">Erase</button>
     <button id="paddone">Close</button>
@@ -264,7 +279,9 @@
     if(!st||!st.players)return st;
     st.players.forEach(function(p){
       if(!p.topar)p.topar=p.scores.map(function(){return null;});
+      if(!p.net)p.net=p.scores.map(function(){return null;});
     });
+    if(!st.wolfPick)st.wolfPick=st.players[0].scores.map(function(){return null;});
     return st;
   }
 
@@ -294,6 +311,44 @@
     };
   }
 
+  /* ----- wolf game ----- */
+  function wolfIdx(h){return h%S.players.length;}
+  /* points for hole h, or null until the pick is made and every net is in.
+     best net ball per team; team win = 1 each, lone wolf win = 3, lone loss = 1 each to the others, tie = 0 */
+  function holePts(h){
+    if(S.game!=='wolf')return null;
+    var n=S.players.length,w=wolfIdx(h),pick=S.wolfPick[h];
+    if(!pick)return null;
+    var nets=S.players.map(function(p){return p.net[h];});
+    for(var i=0;i<n;i++)if(nets[i]==null)return null;
+    var team=[w];
+    if(!pick.lone&&pick.partner!=null)team.push(pick.partner);
+    var oth=[];
+    for(var j=0;j<n;j++)if(team.indexOf(j)<0)oth.push(j);
+    if(!oth.length)return null;
+    var bt=Math.min.apply(null,team.map(function(i){return nets[i];}));
+    var bo=Math.min.apply(null,oth.map(function(i){return nets[i];}));
+    var pts=S.players.map(function(){return 0;});
+    if(bt<bo){var v=pick.lone?3:1;team.forEach(function(i){pts[i]=v;});}
+    else if(bo<bt){oth.forEach(function(i){pts[i]=1;});}
+    return pts;
+  }
+  function ptsSum(pi,from,to){
+    var s=0,any=false;
+    for(var h=from;h<to;h++){
+      var a=holePts(h);
+      if(a){s+=a[pi];any=true;}
+    }
+    return any?s:null;
+  }
+  function ini(pi){return esc(S.players[pi].name.charAt(0).toUpperCase());}
+  function wolfTag(h){
+    var pick=S.wolfPick[h],w=wolfIdx(h);
+    if(!pick)return ini(w)+'?';
+    if(pick.lone)return ini(w)+'*';
+    return ini(w)+'+'+ini(pick.partner);
+  }
+
   /* ---------- setup ---------- */
   function renderSetup(){
     var app=document.getElementById('app');
@@ -319,8 +374,12 @@
           COURSES.map(function(c,i){return'<button data-ci="'+i+'">'+c.name+'</button>';}).join('')+
         '</div>'+
         '<label>Players</label>'+inputs+
-        '<label>Holes</label>'+
-        '<div class="seg"><button id="h9">9 Holes</button><button id="h18" class="on">18 Holes</button></div>'+
+        '<div class="pgrid">'+
+          '<div><label>Holes</label>'+
+            '<div class="seg"><button id="h9">9</button><button id="h18" class="on">18</button></div></div>'+
+          '<div><label>Game</label>'+
+            '<div class="seg"><button id="g0" class="on">None</button><button id="g1">Wolf</button></div></div>'+
+        '</div>'+
         '<button class="primary" id="startBtn">Tee Off</button>'+resume+
       '</div>'+
       '<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>';
@@ -339,6 +398,9 @@
     var holes=18;
     document.getElementById('h9').onclick=function(){holes=9;this.classList.add('on');document.getElementById('h18').classList.remove('on');};
     document.getElementById('h18').onclick=function(){holes=18;this.classList.add('on');document.getElementById('h9').classList.remove('on');};
+    var game=null;
+    document.getElementById('g0').onclick=function(){game=null;this.classList.add('on');document.getElementById('g1').classList.remove('on');};
+    document.getElementById('g1').onclick=function(){game='wolf';this.classList.add('on');document.getElementById('g0').classList.remove('on');};
     document.getElementById('startBtn').onclick=function(){
       var names=[];
       for(var i=0;i<6;i++){var v=document.getElementById('pn'+i).value.trim();if(v)names.push(v);}
@@ -349,10 +411,13 @@
       S={holes:holes,course:courseName,
          coursePars:known?known.pars.slice(0,holes):null,
          date:(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(),
+         game:game,
+         wolfPick:Array.apply(null,Array(holes)).map(function(){return null;}),
          players:names.map(function(n){return{
            name:n,
            scores:Array.apply(null,Array(holes)).map(function(){return null;}),
-           topar:Array.apply(null,Array(holes)).map(function(){return null;})
+           topar:Array.apply(null,Array(holes)).map(function(){return null;}),
+           net:Array.apply(null,Array(holes)).map(function(){return null;})
          };})};
       save();render();
     };
@@ -367,8 +432,13 @@
     for(var c=0;c<n;c++)cols+='<col>';
     cols+='<col class="tot">'+(withTotal?'<col class="tot">':'');
 
+    var wolf=S.game==='wolf';
     var head='<tr><th class="lblh">Hole</th>';
-    for(var h=from;h<to;h++)head+='<th>'+(h+1)+'</th>';
+    for(var h=from;h<to;h++){
+      head+=wolf
+        ?'<th class="wolfhead" data-kind="wolfhead" data-h="'+h+'">'+(h+1)+'<span class="wtag">'+wolfTag(h)+'</span></th>'
+        :'<th>'+(h+1)+'</th>';
+    }
     head+='<th>'+label+'</th>'+(withTotal?'<th>Tot</th>':'')+'</tr>';
 
     /* printed par row when the course is known */
@@ -398,22 +468,52 @@
         rows+='<td class="sumcell">'+(ts==null?'':'<span class="pen sum">'+ts+'</span>')+'</td>';
       }
       rows+='</tr>';
-      /* to-par row — auto-computed when the course is known, otherwise tappable */
-      rows+='<tr class="topar"><td class="rowlbl">+/&minus;</td>';
-      for(var h5=from;h5<to;h5++){
-        var tp=p.topar[h5];
-        var inner=(tp==null?'':'<span class="tp '+(tp<0?'u':'')+'">'+fmtVs(tp)+'</span>');
-        rows+=S.coursePars
-          ?'<td>'+inner+'</td>'
-          :'<td class="scell'+selCls('topar',pi,h5)+'" data-kind="topar" data-p="'+pi+'" data-h="'+h5+'">'+inner+'</td>';
+      if(wolf){
+        /* net row — always tapped in by hand */
+        rows+='<tr class="topar"><td class="rowlbl">Net</td>';
+        for(var h6=from;h6<to;h6++){
+          var nv=p.net[h6];
+          rows+='<td class="scell'+selCls('net',pi,h6)+'" data-kind="net" data-p="'+pi+'" data-h="'+h6+'">'+
+            (nv==null?'':'<span class="tp">'+nv+'</span>')+'</td>';
+        }
+        var ns=segSum(p.net,from,to);
+        rows+='<td class="sumcell">'+(ns==null?'':'<span class="tp">'+ns+'</span>')+'</td>';
+        if(withTotal){
+          var nt=segSum(p.net,0,S.holes);
+          rows+='<td class="sumcell">'+(nt==null?'':'<span class="tp">'+nt+'</span>')+'</td>';
+        }
+        rows+='</tr>';
+        /* points row — computed from the wolf pick + best net ball */
+        rows+='<tr class="ptsrow"><td class="rowlbl">Pts</td>';
+        for(var h7=from;h7<to;h7++){
+          var pa=holePts(h7);
+          rows+='<td>'+(pa&&pa[pi]>0?'<span class="ptv">'+pa[pi]+'</span>':'')+'</td>';
+        }
+        var pss=ptsSum(pi,from,to);
+        rows+='<td class="sumcell">'+(pss==null?'':'<span class="ptv">'+pss+'</span>')+'</td>';
+        if(withTotal){
+          var pst=ptsSum(pi,0,S.holes);
+          rows+='<td class="sumcell">'+(pst==null?'':'<span class="ptv">'+pst+'</span>')+'</td>';
+        }
+        rows+='</tr>';
+      }else{
+        /* to-par row — auto-computed when the course is known, otherwise tappable */
+        rows+='<tr class="topar"><td class="rowlbl">+/&minus;</td>';
+        for(var h5=from;h5<to;h5++){
+          var tp=p.topar[h5];
+          var inner=(tp==null?'':'<span class="tp '+(tp<0?'u':'')+'">'+fmtVs(tp)+'</span>');
+          rows+=S.coursePars
+            ?'<td>'+inner+'</td>'
+            :'<td class="scell'+selCls('topar',pi,h5)+'" data-kind="topar" data-p="'+pi+'" data-h="'+h5+'">'+inner+'</td>';
+        }
+        var sv=segSum(p.topar,from,to);
+        rows+='<td class="sumcell">'+(sv==null?'':'<span class="tp '+(sv<0?'u':'')+'">'+fmtVs(sv)+'</span>')+'</td>';
+        if(withTotal){
+          var tv=segSum(p.topar,0,S.holes);
+          rows+='<td class="sumcell">'+(tv==null?'':'<span class="tp '+(tv<0?'u':'')+'">'+fmtVs(tv)+'</span>')+'</td>';
+        }
+        rows+='</tr>';
       }
-      var sv=segSum(p.topar,from,to);
-      rows+='<td class="sumcell">'+(sv==null?'':'<span class="tp '+(sv<0?'u':'')+'">'+fmtVs(sv)+'</span>')+'</td>';
-      if(withTotal){
-        var tv=segSum(p.topar,0,S.holes);
-        rows+='<td class="sumcell">'+(tv==null?'':'<span class="tp '+(tv<0?'u':'')+'">'+fmtVs(tv)+'</span>')+'</td>';
-      }
-      rows+='</tr>';
     }
     return'<div class="gridwrap"><table class="sc"><colgroup>'+cols+'</colgroup>'+head+parRow+rows+'</table></div>';
   }
@@ -427,7 +527,18 @@
     app.style.paddingBottom='';
 
     var winner='';
-    if(S.players.length>1){
+    if(S.game==='wolf'&&S.players.length>1){
+      var decided=true;
+      for(var dh=0;dh<S.holes;dh++)if(!holePts(dh)){decided=false;break;}
+      if(decided){
+        var wres=S.players.map(function(p,i){return{name:p.name,pts:ptsSum(i,0,S.holes)||0};})
+          .sort(function(a,b){return b.pts-a.pts;});
+        var wtied=wres.filter(function(r){return r.pts===wres[0].pts;});
+        winner='<div class="winner">'+(wtied.length>1
+          ?'Wolf game tied &mdash; '+wtied.map(function(r){return esc(r.name);}).join(' &amp; ')+' at '+wres[0].pts+' pts'
+          :'&#128058; '+esc(wres[0].name)+' wins the Wolf game with '+wres[0].pts+' points')+'</div>';
+      }
+    }else if(S.players.length>1){
       var res=S.players.map(function(p,i){return{name:p.name,t:totals(i)};});
       if(res.every(function(r){return r.t.thru===S.holes;})){
         var best=res.slice().sort(function(a,b){return a.t.strokes-b.t.strokes;});
@@ -458,7 +569,9 @@
         '<div class="legend">'+
           '<span><span class="pen birdie">3</span> under par</span>'+
           '<span><span class="pen bogey">5</span> over par</span>'+
-          '<span>tap any square to score</span>'+
+          (S.game==='wolf'
+            ?'<span>tap a hole number for the Wolf&rsquo;s pick &middot; * = lone wolf</span>'
+            :'<span>tap any square to score</span>')+
         '</div>'+
         '<div class="cardfoot"><button class="ghost" id="newBtn">New Round</button></div>'+
       '</div>';
@@ -507,13 +620,38 @@
   var pad=document.getElementById('pad');
   function padCtx(){
     if(!sel)return'';
+    if(sel.kind==='wolfhead')return esc(S.players[wolfIdx(sel.h)].name)+' is the Wolf &mdash; Hole '+(sel.h+1);
     var base=esc(S.players[sel.pi].name)+' &mdash; Hole '+(sel.h+1);
-    return sel.kind==='topar'?base+' &middot; Score to par':base+' &middot; Strokes';
+    if(sel.kind==='topar')return base+' &middot; Score to par';
+    if(sel.kind==='net')return base+' &middot; Net score';
+    return base+' &middot; Strokes';
+  }
+  function buildWolfGrid(){
+    var w=wolfIdx(sel.h),html='';
+    for(var i=0;i<S.players.length;i++){
+      if(i===w)continue;
+      html+='<button data-wp="'+i+'">Partner: '+esc(S.players[i].name)+'</button>';
+    }
+    html+='<button data-lone="1" class="lone">Lone Wolf</button>';
+    var el=document.getElementById('padwolf');
+    el.innerHTML=html;
+    var bs=el.querySelectorAll('button');
+    for(var k=0;k<bs.length;k++){
+      bs[k].onclick=function(){
+        if(!sel||sel.kind!=='wolfhead')return;
+        S.wolfPick[sel.h]=this.getAttribute('data-lone')
+          ?{lone:true}
+          :{partner:parseInt(this.getAttribute('data-wp'),10)};
+        save();closePad();render();
+      };
+    }
   }
   function openPad(){
     if(!sel)return;
     document.getElementById('padctx').innerHTML=padCtx();
     pad.classList.toggle('tpmode',sel.kind==='topar');
+    pad.classList.toggle('wolfmode',sel.kind==='wolfhead');
+    if(sel.kind==='wolfhead')buildWolfGrid();
     pad.classList.add('open');pad.setAttribute('aria-hidden','false');
   }
   function closePad(){
@@ -526,10 +664,14 @@
     var btns=nums.querySelectorAll('button');
     for(var i=0;i<btns.length;i++){
       btns[i].onclick=function(){
-        if(!sel||sel.kind!=='score')return;
+        if(!sel)return;
         var v=parseInt(this.getAttribute('data-v'),10);
-        S.players[sel.pi].scores[sel.h]=v;
-        if(S.coursePars)S.players[sel.pi].topar[sel.h]=v-S.coursePars[sel.h];
+        if(sel.kind==='score'){
+          S.players[sel.pi].scores[sel.h]=v;
+          if(S.coursePars)S.players[sel.pi].topar[sel.h]=v-S.coursePars[sel.h];
+        }else if(sel.kind==='net'){
+          S.players[sel.pi].net[sel.h]=v;
+        }else return;
         save();closePad();render();
       };
     }
@@ -552,6 +694,8 @@
         S.players[sel.pi].scores[sel.h]=null;
         if(S.coursePars)S.players[sel.pi].topar[sel.h]=null;
       }
+      else if(sel.kind==='net')S.players[sel.pi].net[sel.h]=null;
+      else if(sel.kind==='wolfhead')S.wolfPick[sel.h]=null;
       else S.players[sel.pi].topar[sel.h]=null;
       save();closePad();render();
     };
