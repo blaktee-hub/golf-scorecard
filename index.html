@@ -313,13 +313,13 @@
 
   /* ----- wolf game ----- */
   function wolfIdx(h){return h%S.players.length;}
-  /* points for hole h, or null until the pick is made and every net is in.
-     best net ball per team; team win = 1 each, lone wolf win = 3, lone loss = 1 each to the others, tie = 0 */
+  /* points for hole h, or null until the pick is made and every score is in.
+     best ball per team off the score row; team win = 1 each, lone wolf win = 3, lone loss = 1 each to the others, tie = 0 */
   function holePts(h){
     if(S.game!=='wolf')return null;
     var n=S.players.length,w=wolfIdx(h),pick=S.wolfPick[h];
     if(!pick)return null;
-    var nets=S.players.map(function(p){return p.net[h];});
+    var nets=S.players.map(function(p){return p.scores[h];});
     for(var i=0;i<n;i++)if(nets[i]==null)return null;
     var team=[w];
     if(!pick.lone&&pick.partner!=null)team.push(pick.partner);
@@ -469,21 +469,7 @@
       }
       rows+='</tr>';
       if(wolf){
-        /* net row — always tapped in by hand */
-        rows+='<tr class="topar"><td class="rowlbl">Net</td>';
-        for(var h6=from;h6<to;h6++){
-          var nv=p.net[h6];
-          rows+='<td class="scell'+selCls('net',pi,h6)+'" data-kind="net" data-p="'+pi+'" data-h="'+h6+'">'+
-            (nv==null?'':'<span class="tp">'+nv+'</span>')+'</td>';
-        }
-        var ns=segSum(p.net,from,to);
-        rows+='<td class="sumcell">'+(ns==null?'':'<span class="tp">'+ns+'</span>')+'</td>';
-        if(withTotal){
-          var nt=segSum(p.net,0,S.holes);
-          rows+='<td class="sumcell">'+(nt==null?'':'<span class="tp">'+nt+'</span>')+'</td>';
-        }
-        rows+='</tr>';
-        /* points row — computed from the wolf pick + best net ball */
+        /* points row — computed from the wolf pick + best ball */
         rows+='<tr class="ptsrow"><td class="rowlbl">Pts</td>';
         for(var h7=from;h7<to;h7++){
           var pa=holePts(h7);
