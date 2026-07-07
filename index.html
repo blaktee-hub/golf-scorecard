@@ -395,15 +395,11 @@
     for(var h=from;h<to;h++){var v=teamBest(mem,h,useNet);if(v!=null){s+=v;any=true;}}
     return any?s:null;
   }
-  /* team net best ball vs par: running total through hole h, and segment sums */
-  function teamVsThru(mem,h){
-    if(!S.coursePars||teamBest(mem,h,true)==null)return null;
-    var s=0,any=false;
-    for(var i=0;i<=h;i++){
-      var v=teamBest(mem,i,true);
-      if(v!=null){s+=v-S.coursePars[i];any=true;}
-    }
-    return any?s:null;
+  /* team net best ball vs par: per-hole diff and segment sums */
+  function teamVsHole(mem,h){
+    if(!S.coursePars)return null;
+    var v=teamBest(mem,h,true);
+    return v==null?null:v-S.coursePars[h];
   }
   function teamVsSum(mem,from,to){
     if(!S.coursePars)return null;
@@ -588,8 +584,8 @@
           if(S.coursePars){
             rows+='<tr class="teamrow"><td class="rowlbl">T'+(ti+1)+' &plusmn;</td>';
             for(var hv=from;hv<to;hv++){
-              var cum=teamVsThru(mem,hv);
-              rows+='<td>'+(cum==null?'':'<span class="tp '+(cum<0?'u':'')+'">'+fmtVs(cum)+'</span>')+'</td>';
+              var hvv=teamVsHole(mem,hv);
+              rows+='<td>'+(hvv==null?'':'<span class="tp '+(hvv<0?'u':'')+'">'+fmtVs(hvv)+'</span>')+'</td>';
             }
             var vs1=teamVsSum(mem,from,to);
             rows+='<td class="sumcell">'+(vs1==null?'':'<span class="tp '+(vs1<0?'u':'')+'">'+fmtVs(vs1)+'</span>')+'</td>';
