@@ -140,6 +140,13 @@
   #pad.wolfmode .padgrid{display:none}
   #pad.wolfmode .wolfgrid{display:grid}
 
+  /* best ball */
+  .strdot{color:var(--under);font-size:11px;letter-spacing:-1px;vertical-align:top;font-weight:700}
+  tr.teamrow td{background:var(--paper-dk)}
+  tr.teamrow td.rowlbl{font-size:9px}
+  .tbv{font-family:var(--hand);font-size:16px;color:var(--pencil)}
+  .tbv.net{color:var(--ink)}
+
   .legend{
     display:flex;gap:16px;justify-content:center;flex-wrap:wrap;
     margin-top:14px;font-family:var(--print);font-style:italic;font-size:12px;color:var(--ink-lt);
@@ -280,6 +287,7 @@
     st.players.forEach(function(p){
       if(!p.topar)p.topar=p.scores.map(function(){return null;});
       if(!p.net)p.net=p.scores.map(function(){return null;});
+      if(!p.strokes)p.strokes=p.scores.map(function(){return 0;});
     });
     if(!st.wolfPick)st.wolfPick=st.players[0].scores.map(function(){return null;});
     return st;
@@ -341,6 +349,36 @@
     }
     return any?s:null;
   }
+  /* ----- best ball (2-man teams by entry order) ----- */
+  function bbNet(pi,h){
+    var g=S.players[pi].scores[h];
+    if(g==null)return null;
+    return g-(S.players[pi].strokes[h]||0);
+  }
+  function bbNetSum(pi,from,to){
+    var s=0,any=false;
+    for(var h=from;h<to;h++){var v=bbNet(pi,h);if(v!=null){s+=v;any=true;}}
+    return any?s:null;
+  }
+  function bbTeams(){
+    var t=[];
+    for(var i=0;i<S.players.length;i+=2)t.push(i+1<S.players.length?[i,i+1]:[i]);
+    return t;
+  }
+  function teamBest(mem,h,useNet){
+    var best=null;
+    for(var k=0;k<mem.length;k++){
+      var v=useNet?bbNet(mem[k],h):S.players[mem[k]].scores[h];
+      if(v!=null&&(best==null||v<best))best=v;
+    }
+    return best;
+  }
+  function teamBestSum(mem,from,to,useNet){
+    var s=0,any=false;
+    for(var h=from;h<to;h++){var v=teamBest(mem,h,useNet);if(v!=null){s+=v;any=true;}}
+    return any?s:null;
+  }
+
   function ini(pi){return esc(S.players[pi].name.charAt(0).toUpperCase());}
   function wolfTag(h){
     var pick=S.wolfPick[h],w=wolfIdx(h);
@@ -378,7 +416,7 @@
           '<div><label>Holes</label>'+
             '<div class="seg"><button id="h9">9</button><button id="h18" class="on">18</button></div></div>'+
           '<div><label>Game</label>'+
-            '<div class="seg"><button id="g0" class="on">None</button><button id="g1">Wolf</button></div></div>'+
+            '<div class="seg"><button id="g0" class="on">None</button><button id="g1">Wolf</button><button id="g2">BB</button></div></div>'+
         '</div>'+
         '<button class="primary" id="startBtn">Tee Off</button>'+resume+
       '</div>'+
@@ -399,8 +437,14 @@
     document.getElementById('h9').onclick=function(){holes=9;this.classList.add('on');document.getElementById('h18').classList.remove('on');};
     document.getElementById('h18').onclick=function(){holes=18;this.classList.add('on');document.getElementById('h9').classList.remove('on');};
     var game=null;
-    document.getElementById('g0').onclick=function(){game=null;this.classList.add('on');document.getElementById('g1').classList.remove('on');};
-    document.getElementById('g1').onclick=function(){game='wolf';this.classList.add('on');document.getElementById('g0').classList.remove('on');};
+    function gameSeg(id,val){
+      document.getElementById(id).onclick=function(){
+        game=val;
+        ['g0','g1','g2'].forEach(function(g){document.getElementById(g).classList.remove('on');});
+        this.classList.add('on');
+      };
+    }
+    gameSeg('g0',null);gameSeg('g1','wolf');gameSeg('g2','bestball');
     document.getElementById('startBtn').onclick=function(){
       var names=[];
       for(var i=0;i<6;i++){var v=document.getElementById('pn'+i).value.trim();if(v)names.push(v);}
@@ -417,7 +461,8 @@
            name:n,
            scores:Array.apply(null,Array(holes)).map(function(){return null;}),
            topar:Array.apply(null,Array(holes)).map(function(){return null;}),
-           net:Array.apply(null,Array(holes)).map(function(){return null;})
+           net:Array.apply(null,Array(holes)).map(function(){return null;}),
+           strokes:Array.apply(null,Array(holes)).map(function(){return 0;})
          };})};
       save();render();
     };
@@ -433,6 +478,7 @@
     cols+='<col class="tot">'+(withTotal?'<col class="tot">':'');
 
     var wolf=S.game==='wolf';
+    var bb=S.game==='bestball';
     var head='<tr><th class="lblh">Hole</th>';
     for(var h=from;h<to;h++){
       head+=wolf
@@ -468,7 +514,41 @@
         rows+='<td class="sumcell">'+(ts==null?'':'<span class="pen sum">'+ts+'</span>')+'</td>';
       }
       rows+='</tr>';
-      if(wolf){
+      if(bb){
+        /* net row — tap a square to toggle handicap strokes (• = 1, •• = 2); net = gross − strokes */
+        rows+='<tr class="topar"><td class="rowlbl">Net</td>';
+        for(var hb=from;hb<to;hb++){
+          var stk=p.strokes[hb]||0,nv=bbNet(pi,hb);
+          rows+='<td class="scell" data-kind="bbnet" data-p="'+pi+'" data-h="'+hb+'">'+
+            (nv==null?'':'<span class="tp">'+nv+'</span>')+
+            (stk>0?'<span class="strdot">'+(stk===2?'&bull;&bull;':'&bull;')+'</span>':'')+'</td>';
+        }
+        var bns=bbNetSum(pi,from,to);
+        rows+='<td class="sumcell">'+(bns==null?'':'<span class="tp">'+bns+'</span>')+'</td>';
+        if(withTotal){
+          var bnt=bbNetSum(pi,0,S.holes);
+          rows+='<td class="sumcell">'+(bnt==null?'':'<span class="tp">'+bnt+'</span>')+'</td>';
+        }
+        rows+='</tr>';
+        /* team best-ball rows after each pair */
+        if(pi%2===1||pi===S.players.length-1){
+          var ti=Math.floor(pi/2),mem=bbTeams()[ti];
+          [false,true].forEach(function(useNet){
+            rows+='<tr class="teamrow"><td class="rowlbl">T'+(ti+1)+(useNet?' Net':' Gross')+'</td>';
+            for(var ht=from;ht<to;ht++){
+              var tv=teamBest(mem,ht,useNet);
+              rows+='<td>'+(tv==null?'':'<span class="tbv'+(useNet?' net':'')+'">'+tv+'</span>')+'</td>';
+            }
+            var tss=teamBestSum(mem,from,to,useNet);
+            rows+='<td class="sumcell">'+(tss==null?'':'<span class="tbv'+(useNet?' net':'')+'">'+tss+'</span>')+'</td>';
+            if(withTotal){
+              var tst=teamBestSum(mem,0,S.holes,useNet);
+              rows+='<td class="sumcell">'+(tst==null?'':'<span class="tbv'+(useNet?' net':'')+'">'+tst+'</span>')+'</td>';
+            }
+            rows+='</tr>';
+          });
+        }
+      }else if(wolf){
         /* points row — computed from the wolf pick + best ball */
         rows+='<tr class="ptsrow"><td class="rowlbl">Pts</td>';
         for(var h7=from;h7<to;h7++){
@@ -524,7 +604,7 @@
           ?'Wolf game tied &mdash; '+wtied.map(function(r){return esc(r.name);}).join(' &amp; ')+' at '+wres[0].pts+' pts'
           :'&#128058; '+esc(wres[0].name)+' wins the Wolf game with '+wres[0].pts+' points')+'</div>';
       }
-    }else if(S.players.length>1){
+    }else if(S.game!=='bestball'&&S.players.length>1){
       var res=S.players.map(function(p,i){return{name:p.name,t:totals(i)};});
       if(res.every(function(r){return r.t.thru===S.holes;})){
         var best=res.slice().sort(function(a,b){return a.t.strokes-b.t.strokes;});
@@ -557,6 +637,8 @@
           '<span><span class="pen bogey">5</span> over par</span>'+
           (S.game==='wolf'
             ?'<span>tap a hole number for the Wolf&rsquo;s pick &middot; * = lone wolf</span>'
+            :S.game==='bestball'
+            ?'<span>tap a Net square to give a stroke (<span class="strdot">&bull;</span> = 1, <span class="strdot">&bull;&bull;</span> = 2)</span>'
             :'<span>tap any square to score</span>')+
         '</div>'+
         '<div class="cardfoot"><button class="ghost" id="newBtn">New Round</button></div>'+
@@ -585,9 +667,15 @@
     var cells=app.querySelectorAll('[data-kind]');
     for(var i=0;i<cells.length;i++){
       cells[i].onclick=function(){
-        sel={kind:this.getAttribute('data-kind'),
-             pi:parseInt(this.getAttribute('data-p'),10),
-             h:parseInt(this.getAttribute('data-h'),10)};
+        var kind=this.getAttribute('data-kind');
+        var h=parseInt(this.getAttribute('data-h'),10);
+        if(kind==='bbnet'){
+          /* tap cycles handicap strokes for that hole: 0 → 1 → 2 → 0 */
+          var bp=parseInt(this.getAttribute('data-p'),10);
+          S.players[bp].strokes[h]=((S.players[bp].strokes[h]||0)+1)%3;
+          save();render();return;
+        }
+        sel={kind:kind,pi:parseInt(this.getAttribute('data-p'),10),h:h};
         render();openPad();
       };
     }
