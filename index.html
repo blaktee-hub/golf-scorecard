@@ -147,6 +147,23 @@
   .tbv{font-family:var(--hand);font-size:16px;color:var(--pencil)}
   .tbv.net{color:var(--ink)}
 
+  /* strokes (pops) screen */
+  .pblock{margin:14px 0 4px}
+  .pname2{display:flex;justify-content:space-between;align-items:baseline;margin:0 2px 6px}
+  .pname2 .nm{font-family:var(--print);font-weight:700;font-size:15px;color:var(--ink)}
+  .pname2 .pops{font-family:var(--print);font-style:italic;font-size:13px;color:var(--ink-lt)}
+  .popgrid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+  .popgrid button{
+    padding:5px 0 3px;background:#fff;border:1.5px solid var(--ink);border-radius:7px;
+    cursor:pointer;font-family:var(--print);color:var(--ink);line-height:1.15;
+  }
+  .popgrid button .hn{font-size:14px;font-weight:700;display:block}
+  .popgrid button .hp{font-size:8px;color:var(--ink-lt);display:block;letter-spacing:.04em}
+  .popgrid button .hd{font-size:11px;color:var(--under);display:block;min-height:13px;letter-spacing:-1px;font-weight:700}
+  .popgrid button.on{background:var(--ink);color:var(--paper)}
+  .popgrid button.on .hp{color:#BFD3C7}
+  .popgrid button.on .hd{color:#F2B8AE}
+
   .legend{
     display:flex;gap:16px;justify-content:center;flex-wrap:wrap;
     margin-top:14px;font-family:var(--print);font-style:italic;font-size:12px;color:var(--ink-lt);
@@ -464,6 +481,7 @@
            net:Array.apply(null,Array(holes)).map(function(){return null;}),
            strokes:Array.apply(null,Array(holes)).map(function(){return 0;})
          };})};
+      if(game==='bestball')S.view='strokes';
       save();render();
     };
     var rb=document.getElementById('resumeBtn');
@@ -515,11 +533,11 @@
       }
       rows+='</tr>';
       if(bb){
-        /* net row — tap a square to toggle handicap strokes (• = 1, •• = 2); net = gross − strokes */
+        /* net row — display only; stroke holes are set on the Strokes screen. net = gross − strokes */
         rows+='<tr class="topar"><td class="rowlbl">Net</td>';
         for(var hb=from;hb<to;hb++){
           var stk=p.strokes[hb]||0,nv=bbNet(pi,hb);
-          rows+='<td class="scell" data-kind="bbnet" data-p="'+pi+'" data-h="'+hb+'">'+
+          rows+='<td>'+
             (nv==null?'':'<span class="tp">'+nv+'</span>')+
             (stk>0?'<span class="strdot">'+(stk===2?'&bull;&bull;':'&bull;')+'</span>':'')+'</td>';
         }
@@ -638,11 +656,17 @@
           (S.game==='wolf'
             ?'<span>tap a hole number for the Wolf&rsquo;s pick &middot; * = lone wolf</span>'
             :S.game==='bestball'
-            ?'<span>tap a Net square to give a stroke (<span class="strdot">&bull;</span> = 1, <span class="strdot">&bull;&bull;</span> = 2)</span>'
+            ?'<span><span class="strdot">&bull;</span> = pop hole &mdash; set them on the Strokes screen</span>'
             :'<span>tap any square to score</span>')+
         '</div>'+
-        '<div class="cardfoot"><button class="ghost" id="newBtn">New Round</button></div>'+
+        '<div class="cardfoot">'+
+          (S.game==='bestball'?'<button class="ghost" id="strokesBtn">Strokes</button>':'')+
+          '<button class="ghost" id="newBtn">New Round</button>'+
+        '</div>'+
       '</div>';
+
+    var sb=document.getElementById('strokesBtn');
+    if(sb)sb.onclick=function(){S.view='strokes';save();render();};
 
     /* confirm() is blocked inside the artifact page, so confirm with a second tap */
     var newBtn=document.getElementById('newBtn');
@@ -667,15 +691,9 @@
     var cells=app.querySelectorAll('[data-kind]');
     for(var i=0;i<cells.length;i++){
       cells[i].onclick=function(){
-        var kind=this.getAttribute('data-kind');
-        var h=parseInt(this.getAttribute('data-h'),10);
-        if(kind==='bbnet'){
-          /* tap cycles handicap strokes for that hole: 0 → 1 → 2 → 0 */
-          var bp=parseInt(this.getAttribute('data-p'),10);
-          S.players[bp].strokes[h]=((S.players[bp].strokes[h]||0)+1)%3;
-          save();render();return;
-        }
-        sel={kind:kind,pi:parseInt(this.getAttribute('data-p'),10),h:h};
+        sel={kind:this.getAttribute('data-kind'),
+             pi:parseInt(this.getAttribute('data-p'),10),
+             h:parseInt(this.getAttribute('data-h'),10)};
         render();openPad();
       };
     }
@@ -685,8 +703,55 @@
     }
   }
 
+  /* ---------- strokes (pops) screen ---------- */
+  function renderStrokes(){
+    var app=document.getElementById('app');
+    app.style.paddingBottom='10px';
+    var blocks='';
+    for(var pi=0;pi<S.players.length;pi++){
+      var p=S.players[pi];
+      var cnt=p.strokes.reduce(function(a,b){return a+(b||0);},0);
+      blocks+='<div class="pblock">'+
+        '<div class="pname2"><span class="nm">'+esc(p.name)+'</span>'+
+        '<span class="pops" id="pops'+pi+'">'+cnt+(cnt===1?' pop':' pops')+'</span></div>'+
+        '<div class="popgrid">';
+      for(var h=0;h<S.holes;h++){
+        var s=p.strokes[h]||0;
+        blocks+='<button data-p="'+pi+'" data-h="'+h+'" class="'+(s>0?'on':'')+'">'+
+          '<span class="hn">'+(h+1)+'</span>'+
+          (S.coursePars?'<span class="hp">par '+S.coursePars[h]+'</span>':'')+
+          '<span class="hd">'+(s===2?'&bull;&bull;':s===1?'&bull;':'&nbsp;')+'</span></button>';
+      }
+      blocks+='</div></div>';
+    }
+    app.innerHTML=
+      '<div class="paper">'+
+        '<div class="cardhead">'+
+          '<div class="club">'+(S.course?esc(S.course):'Official Scorecard')+'</div>'+
+          '<div class="sub">Handicap strokes &mdash; tap the holes each player pops on (tap twice for 2)</div>'+
+        '</div>'+
+        blocks+
+        '<div class="cardfoot"><button class="primary" id="doneStrokes" style="margin-top:0">Done &mdash; to the card</button></div>'+
+      '</div>';
+    var bs=app.querySelectorAll('.popgrid button');
+    for(var i=0;i<bs.length;i++){
+      bs[i].onclick=function(){
+        var bp=parseInt(this.getAttribute('data-p'),10),bh=parseInt(this.getAttribute('data-h'),10);
+        var ns=((S.players[bp].strokes[bh]||0)+1)%3;
+        S.players[bp].strokes[bh]=ns;save();
+        this.classList.toggle('on',ns>0);
+        this.querySelector('.hd').innerHTML=ns===2?'&bull;&bull;':ns===1?'&bull;':'&nbsp;';
+        var c=S.players[bp].strokes.reduce(function(a,b){return a+(b||0);},0);
+        document.getElementById('pops'+bp).textContent=c+(c===1?' pop':' pops');
+      };
+    }
+    document.getElementById('doneStrokes').onclick=function(){S.view='card';save();render();};
+    window.scrollTo(0,0);
+  }
+
   function render(){
     if(!S){renderSetup();closePad();return;}
+    if(S.view==='strokes'&&S.game==='bestball'){closePad();renderStrokes();return;}
     renderCard();
   }
 
