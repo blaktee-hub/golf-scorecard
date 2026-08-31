@@ -123,6 +123,35 @@
   .chips button.addc{font-size:16px;font-weight:700;padding:6px 12px;line-height:1}
   .chips button.delon{background:var(--under);border-color:var(--under);color:var(--paper)}
   .delhint{font-family:var(--print);font-style:italic;font-size:12px;color:var(--under);margin:6px 2px 0}
+  /* rounds (history) screen */
+  .hrow{display:flex;gap:8px;align-items:stretch;margin-top:10px}
+  .hmain{
+    flex:1;text-align:left;background:var(--paper);border:1.5px solid var(--ink);
+    border-radius:10px;padding:10px 12px;cursor:pointer;min-width:0;
+  }
+  .hmain:active{background:var(--paper-dk)}
+  .htop{display:flex;align-items:baseline;gap:8px}
+  .hc{font-family:var(--print);font-size:16px;font-weight:700;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hg{font-family:var(--print);font-size:10px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--paper);background:var(--ink);
+    padding:2px 7px;border-radius:999px;flex:none}
+  .hmeta{font-family:var(--print);font-style:italic;font-size:12px;color:var(--ink-lt);margin-top:2px}
+  .hplayers{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:7px}
+  .hp{display:flex;align-items:baseline;gap:5px}
+  .hpn{font-family:var(--print);font-size:12px;color:var(--ink-lt)}
+  .hps{font-family:var(--hand);font-size:16px;color:var(--pencil);font-variant-numeric:tabular-nums}
+  .hps em{font-style:normal;font-size:12px;color:var(--ink-lt)}
+  .hps em.u{color:var(--under)}
+  .hdel{
+    flex:none;width:42px;background:transparent;border:1.5px solid var(--line);
+    border-radius:10px;color:var(--ink-lt);font-size:20px;cursor:pointer;
+  }
+  .hdel.armed{border-color:var(--under);color:var(--under);font-size:11px;
+    font-family:var(--print);font-weight:700;letter-spacing:.04em}
+  .emptyh{font-family:var(--print);font-style:italic;font-size:13px;
+    color:var(--ink-lt);text-align:center;margin:18px 10px;line-height:1.6}
+
   /* add-a-course screen */
   .blab{display:block;font-family:var(--print);font-size:11px;font-weight:700;
     letter-spacing:.14em;text-transform:uppercase;color:var(--ink);margin:12px 2px 4px}
@@ -323,8 +352,37 @@
     return null;
   }
 
+  /* finished rounds, newest first */
+  var HKEY='golf-history-v1';
+  var HISTORY=[];
+  var readonly=false;   /* true while viewing an archived round */
+  function loadHistory(){
+    try{var r=localStorage.getItem(HKEY);HISTORY=r?JSON.parse(r):[];}catch(e){HISTORY=[];}
+    if(!HISTORY)HISTORY=[];
+  }
+  function saveHistory(){try{localStorage.setItem(HKEY,JSON.stringify(HISTORY));}catch(e){}}
+  function roundHasScores(r){
+    return !!(r&&r.players&&r.players.some(function(p){
+      return p.scores.some(function(v){return v!=null;});
+    }));
+  }
+  /* move the live round into history (called when a new round starts) */
+  function archiveRound(){
+    if(!roundHasScores(S))return false;
+    var rec=JSON.parse(JSON.stringify(S));
+    delete rec.view;
+    rec.savedAt=new Date().toISOString();
+    HISTORY.unshift(rec);
+    if(HISTORY.length>100)HISTORY.length=100;
+    saveHistory();
+    return true;
+  }
+
   function load(){try{var r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);}catch(e){S=null;}}
-  function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+  function save(){
+    if(readonly)return;   /* never let a history view overwrite the live round */
+    try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  }
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
   function normalize(st){
@@ -486,6 +544,7 @@
             '<div class="seg"><button id="g0" class="on">None</button><button id="g1">Wolf</button><button id="g2">BB</button></div></div>'+
         '</div>'+
         '<button class="primary" id="startBtn">Tee Off</button>'+resume+
+        (HISTORY.length?'<button class="resume" id="histBtn">Rounds ('+HISTORY.length+')</button>':'')+
       '</div>'+
       '<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>';
     app.style.paddingBottom='10px';
@@ -511,6 +570,8 @@
     };
     var dc=document.getElementById('delCourse');
     if(dc)dc.onclick=function(){delMode=!delMode;renderSetup();};
+    var hb=document.getElementById('histBtn');
+    if(hb)hb.onclick=function(){delMode=false;setupScreen='history';render();};
 
     var holes=18;
     document.getElementById('h9').onclick=function(){holes=9;this.classList.add('on');document.getElementById('h18').classList.remove('on');};
@@ -737,8 +798,10 @@
             :'<span>tap any square to score</span>')+
         '</div>'+
         '<div class="cardfoot">'+
-          (S.game==='bestball'?'<button class="ghost" id="strokesBtn">Strokes</button>':'')+
-          '<button class="ghost" id="newBtn">New Round</button>'+
+          (readonly
+            ?'<button class="ghost" id="backHist">&larr; Back to Rounds</button>'
+            :(S.game==='bestball'?'<button class="ghost" id="strokesBtn">Strokes</button>':'')+
+             '<button class="ghost" id="newBtn">New Round</button>')+
         '</div>'+
       '</div>';
 
@@ -746,11 +809,19 @@
     if(sb)sb.onclick=function(){S.view='strokes';save();render();};
 
     /* confirm() is blocked inside the artifact page, so confirm with a second tap */
+    if(readonly){
+      /* viewing an archived round — back out to the history list */
+      document.getElementById('backHist').onclick=function(){
+        readonly=false;S=null;sel=null;setupScreen='history';closePad();render();
+      };
+      return;
+    }
+
     var newBtn=document.getElementById('newBtn');
     newBtn.onclick=function(){
       if(!newBtn.dataset.armed){
         newBtn.dataset.armed='1';
-        newBtn.textContent='Tap again to erase this card';
+        newBtn.textContent=roundHasScores(S)?'Tap again to save & start new':'Tap again to start new';
         newBtn.style.borderColor='var(--under)';newBtn.style.color='var(--under)';
         setTimeout(function(){
           if(newBtn.isConnected){
@@ -761,6 +832,7 @@
         },3500);
         return;
       }
+      archiveRound();                       /* keep the card in Rounds */
       try{localStorage.removeItem(KEY);}catch(e){}
       S=null;sel=null;closePad();render();
     };
@@ -826,6 +898,87 @@
     window.scrollTo(0,0);
   }
 
+  /* ---------- rounds (history) screen ---------- */
+  function roundTotals(r,pi){
+    var p=r.players[pi],strokes=0,vs=0,thru=0;
+    for(var h=0;h<r.holes;h++){
+      var v=p.scores[h];
+      if(v!=null){strokes+=v;thru++;if(r.coursePars)vs+=v-r.coursePars[h];}
+    }
+    return{strokes:strokes,vs:r.coursePars?vs:null,thru:thru};
+  }
+  function prettyDate(r){
+    if(r.savedAt){
+      var d=new Date(r.savedAt);
+      if(!isNaN(d))return (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+    }
+    return r.date||'';
+  }
+  function renderHistory(){
+    var app=document.getElementById('app');
+    app.style.paddingBottom='10px';
+    var rows='';
+    if(!HISTORY.length){
+      rows='<p class="emptyh">No saved rounds yet. Finish a card with &ldquo;New Round&rdquo; and it lands here.</p>';
+    }
+    for(var i=0;i<HISTORY.length;i++){
+      var r=HISTORY[i];
+      var who='';
+      for(var pi=0;pi<r.players.length;pi++){
+        var t=roundTotals(r,pi);
+        who+='<div class="hp"><span class="hpn">'+esc(r.players[pi].name)+'</span>'+
+          '<span class="hps">'+(t.thru?t.strokes:'&mdash;')+
+          (t.vs!=null&&t.thru?' <em class="'+(t.vs<0?'u':'')+'">'+fmtVs(t.vs)+'</em>':'')+'</span></div>';
+      }
+      var badge=r.game==='wolf'?'Wolf':r.game==='bestball'?'Best Ball':'';
+      rows+='<div class="hrow">'+
+        '<button class="hmain" data-i="'+i+'">'+
+          '<div class="htop"><span class="hc">'+esc(r.course||'Round')+'</span>'+
+            (badge?'<span class="hg">'+badge+'</span>':'')+'</div>'+
+          '<div class="hmeta">'+prettyDate(r)+' &middot; '+r.holes+' holes</div>'+
+          '<div class="hplayers">'+who+'</div>'+
+        '</button>'+
+        '<button class="hdel" data-d="'+i+'" aria-label="Delete round">&times;</button>'+
+      '</div>';
+    }
+    app.innerHTML=
+      '<div class="paper">'+
+        '<div class="cardhead">'+
+          '<div class="club">Rounds</div>'+
+          '<div class="sub">'+(HISTORY.length?HISTORY.length+' saved round'+(HISTORY.length===1?'':'s')+' &mdash; tap one to see the card':'Your saved cards live here')+'</div>'+
+        '</div>'+
+        rows+
+        '<div class="cardfoot"><button class="ghost" id="histBack">&larr; Back</button></div>'+
+      '</div>';
+
+    var opens=app.querySelectorAll('.hmain');
+    for(var k=0;k<opens.length;k++){
+      opens[k].onclick=function(){
+        var idx=parseInt(this.getAttribute('data-i'),10);
+        readonly=true;
+        S=normalize(JSON.parse(JSON.stringify(HISTORY[idx])));
+        S.view='card';
+        render();
+      };
+    }
+    var dels=app.querySelectorAll('.hdel');
+    for(var d=0;d<dels.length;d++){
+      dels[d].onclick=function(){
+        var btn=this,idx=parseInt(btn.getAttribute('data-d'),10);
+        if(!btn.dataset.armed){
+          btn.dataset.armed='1';btn.classList.add('armed');btn.textContent='Delete?';
+          setTimeout(function(){
+            if(btn.isConnected){delete btn.dataset.armed;btn.classList.remove('armed');btn.innerHTML='&times;';}
+          },3000);
+          return;
+        }
+        HISTORY.splice(idx,1);saveHistory();renderHistory();
+      };
+    }
+    document.getElementById('histBack').onclick=function(){setupScreen='setup';render();};
+    window.scrollTo(0,0);
+  }
+
   /* ---------- add-a-course screen ---------- */
   function renderNewCourse(){
     var app=document.getElementById('app');
@@ -884,6 +1037,7 @@
   function render(){
     if(!S){
       if(setupScreen==='newcourse'){closePad();renderNewCourse();return;}
+      if(setupScreen==='history'){closePad();renderHistory();return;}
       renderSetup();closePad();return;
     }
     if(S.view==='strokes'&&S.game==='bestball'){closePad();renderStrokes();return;}
@@ -977,6 +1131,7 @@
   })();
 
   loadCourses();
+  loadHistory();
   load();
   S=normalize(S);
   render();
