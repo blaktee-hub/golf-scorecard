@@ -117,6 +117,19 @@
     color:var(--ink);cursor:pointer;
   }
   .chips button.on{background:var(--ink);color:var(--paper)}
+  .chips button.mine{border-style:dashed}
+  .chips button.del{border-color:var(--under);color:var(--under);border-style:solid}
+  .chips button.locked{opacity:.35}
+  .chips button.addc{font-size:16px;font-weight:700;padding:6px 12px;line-height:1}
+  .chips button.delon{background:var(--under);border-color:var(--under);color:var(--paper)}
+  .delhint{font-family:var(--print);font-style:italic;font-size:12px;color:var(--under);margin:6px 2px 0}
+  /* add-a-course screen */
+  .blab{display:block;font-family:var(--print);font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink);margin:12px 2px 4px}
+  #ncName{width:100%;padding:8px;font-size:17px;color:var(--pencil);font-family:var(--hand);
+    border:none;border-bottom:1.5px solid var(--ink);background:transparent}
+  #ncName::placeholder{color:#B9AE8D;font-family:var(--sans);font-size:14px}
+  .ncgrid button .bp{display:block;font-family:var(--hand);font-size:17px;color:var(--pencil)}
 
   /* to-par line — same cell size as the score row */
   tr.topar td{background:var(--paper)}
@@ -276,9 +289,12 @@
   var KEY='golf-scorecard-v1';
   var S=null;
   var sel=null; /* {kind:'score'|'topar',pi,h} — not persisted */
+  var setupScreen='setup';  /* 'setup' | 'newcourse' */
+  var delMode=false;        /* remove-a-course mode on the setup screen */
+  var builder=null;         /* {name, pars[18]} while building a course */
 
   /* hole-by-hole pars from the official City of Idaho Falls scorecards (golfif.com) */
-  var COURSES=[
+  var BUILT_IN=[
     {name:'Sand Creek',      pars:[4,5,4,4,4,5,3,4,3, 4,5,4,3,4,4,3,4,5]},
     {name:'Pinecrest',       pars:[4,4,5,4,3,5,3,4,4, 3,5,3,4,4,4,3,4,4]},
     {name:'Sage Lakes',      pars:[4,4,3,4,4,3,5,3,5, 5,4,3,4,3,4,5,3,4]},
@@ -286,12 +302,23 @@
     {name:'Blackfoot',       pars:[5,4,4,4,3,5,3,4,4, 3,4,5,4,5,4,3,4,4]},
     {name:'Idaho Falls CC',  pars:[4,5,3,4,4,4,3,5,4, 4,3,5,4,4,4,3,4,5]}
   ];
+  /* courses the golfer adds on this phone (travel courses) — kept separately so
+     they survive New Round and can be deleted without touching the built-ins */
+  var CKEY='golf-courses-v1';
+  var MYCOURSES=[];
+  function loadCourses(){
+    try{var r=localStorage.getItem(CKEY);MYCOURSES=r?JSON.parse(r):[];}catch(e){MYCOURSES=[];}
+    if(!MYCOURSES||!MYCOURSES.length)MYCOURSES=[];
+  }
+  function saveCourses(){try{localStorage.setItem(CKEY,JSON.stringify(MYCOURSES));}catch(e){}}
+  function allCourses(){return BUILT_IN.concat(MYCOURSES);}
   function findCourse(n){
     if(!n)return null;
     n=n.toLowerCase().trim();
-    for(var i=0;i<COURSES.length;i++){
-      var c=COURSES[i].name.toLowerCase();
-      if(n===c||n.indexOf(c)>=0||(n.length>=4&&c.indexOf(n)>=0))return COURSES[i];
+    var list=allCourses();
+    for(var i=0;i<list.length;i++){
+      var c=list[i].name.toLowerCase();
+      if(n===c||n.indexOf(c)>=0||(n.length>=4&&c.indexOf(n)>=0))return list[i];
     }
     return null;
   }
@@ -442,8 +469,15 @@
         '<label>Course</label>'+
         '<input type="text" id="course" maxlength="30" placeholder="Type a course, or tap one below">'+
         '<div class="chips">'+
-          COURSES.map(function(c,i){return'<button data-ci="'+i+'">'+c.name+'</button>';}).join('')+
+          allCourses().map(function(c,i){
+            var mine=i>=BUILT_IN.length;
+            return'<button data-ci="'+i+'" class="'+(mine?'mine':'')+(delMode&&mine?' del':'')+
+              (delMode&&!mine?' locked':'')+'">'+esc(c.name)+(delMode&&mine?' &times;':'')+'</button>';
+          }).join('')+
+          '<button class="addc" id="addCourse">+</button>'+
+          (MYCOURSES.length?'<button class="addc'+(delMode?' delon':'')+'" id="delCourse">&minus;</button>':'')+
         '</div>'+
+        (delMode?'<p class="delhint">Tap one of your own courses to remove it.</p>':'')+
         '<label>Players</label>'+inputs+
         '<div class="pgrid">'+
           '<div><label>Holes</label>'+
@@ -456,15 +490,27 @@
       '<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>';
     app.style.paddingBottom='10px';
 
-    var chipBtns=app.querySelectorAll('.chips button');
+    var chipBtns=app.querySelectorAll('.chips button[data-ci]');
     for(var cb=0;cb<chipBtns.length;cb++){
       chipBtns[cb].onclick=function(){
-        var c=COURSES[parseInt(this.getAttribute('data-ci'),10)];
-        document.getElementById('course').value=c.name;
+        var idx=parseInt(this.getAttribute('data-ci'),10);
+        if(delMode){
+          if(idx<BUILT_IN.length)return;            /* built-ins can't be deleted */
+          MYCOURSES.splice(idx-BUILT_IN.length,1);
+          saveCourses();
+          if(!MYCOURSES.length)delMode=false;
+          renderSetup();return;
+        }
+        document.getElementById('course').value=allCourses()[idx].name;
         for(var k=0;k<chipBtns.length;k++)chipBtns[k].classList.remove('on');
         this.classList.add('on');
       };
     }
+    document.getElementById('addCourse').onclick=function(){
+      delMode=false;builder=null;setupScreen='newcourse';render();
+    };
+    var dc=document.getElementById('delCourse');
+    if(dc)dc.onclick=function(){delMode=!delMode;renderSetup();};
 
     var holes=18;
     document.getElementById('h9').onclick=function(){holes=9;this.classList.add('on');document.getElementById('h18').classList.remove('on');};
@@ -780,8 +826,66 @@
     window.scrollTo(0,0);
   }
 
+  /* ---------- add-a-course screen ---------- */
+  function renderNewCourse(){
+    var app=document.getElementById('app');
+    app.style.paddingBottom='10px';
+    if(!builder)builder={name:'',pars:Array.apply(null,Array(18)).map(function(){return 4;})};
+    var tot=builder.pars.reduce(function(a,b){return a+b;},0);
+    var grid='';
+    for(var h=0;h<18;h++){
+      grid+='<button data-h="'+h+'"><span class="hn">'+(h+1)+'</span>'+
+        '<span class="bp">'+builder.pars[h]+'</span></button>';
+    }
+    app.innerHTML=
+      '<div class="paper">'+
+        '<div class="cardhead">'+
+          '<div class="club">Add a Course</div>'+
+          '<div class="sub">Tap a hole to set its par &mdash; 3, 4, 5, then back to 3</div>'+
+        '</div>'+
+        '<label class="blab">Course name</label>'+
+        '<input type="text" id="ncName" maxlength="24" placeholder="e.g. Coeur d&rsquo;Alene" value="'+esc(builder.name)+'">'+
+        '<div class="pname2" style="margin-top:14px"><span class="nm">Par for each hole</span>'+
+          '<span class="pops" id="ncTot">Par '+tot+'</span></div>'+
+        '<div class="popgrid ncgrid">'+grid+'</div>'+
+        '<div class="cardfoot">'+
+          '<button class="ghost" id="ncCancel">Cancel</button>'+
+          '<button class="primary" id="ncSave" style="margin-top:0">Save Course</button>'+
+        '</div>'+
+      '</div>';
+
+    document.getElementById('ncName').oninput=function(){builder.name=this.value;};
+    var bs=app.querySelectorAll('.ncgrid button');
+    for(var i=0;i<bs.length;i++){
+      bs[i].onclick=function(){
+        var h=parseInt(this.getAttribute('data-h'),10);
+        builder.pars[h]=builder.pars[h]>=5?3:builder.pars[h]+1;
+        this.querySelector('.bp').textContent=builder.pars[h];
+        document.getElementById('ncTot').textContent='Par '+builder.pars.reduce(function(a,b){return a+b;},0);
+      };
+    }
+    document.getElementById('ncCancel').onclick=function(){
+      builder=null;setupScreen='setup';render();
+    };
+    document.getElementById('ncSave').onclick=function(){
+      var nm=(builder.name||'').trim();
+      if(!nm){
+        var el=document.getElementById('ncName');
+        el.placeholder='Give the course a name first';
+        el.style.borderBottomColor='var(--under)';el.focus();return;
+      }
+      MYCOURSES.push({name:nm,pars:builder.pars.slice()});
+      saveCourses();
+      builder=null;setupScreen='setup';render();
+    };
+    window.scrollTo(0,0);
+  }
+
   function render(){
-    if(!S){renderSetup();closePad();return;}
+    if(!S){
+      if(setupScreen==='newcourse'){closePad();renderNewCourse();return;}
+      renderSetup();closePad();return;
+    }
     if(S.view==='strokes'&&S.game==='bestball'){closePad();renderStrokes();return;}
     renderCard();
   }
@@ -872,6 +976,7 @@
     document.getElementById('paddone').onclick=function(){closePad();render();};
   })();
 
+  loadCourses();
   load();
   S=normalize(S);
   render();
