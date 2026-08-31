@@ -799,14 +799,17 @@
         '</div>'+
         '<div class="cardfoot">'+
           (readonly
-            ?'<button class="ghost" id="backHist">&larr; Back to Rounds</button>'
+            ?'<button class="ghost" id="backHist">&larr; Back</button>'+
+             '<button class="ghost" id="shareBtn">Share</button>'
             :(S.game==='bestball'?'<button class="ghost" id="strokesBtn">Strokes</button>':'')+
+             '<button class="ghost" id="shareBtn">Share</button>'+
              '<button class="ghost" id="newBtn">New Round</button>')+
         '</div>'+
       '</div>';
 
     var sb=document.getElementById('strokesBtn');
     if(sb)sb.onclick=function(){S.view='strokes';save();render();};
+    wireShare(document.getElementById('shareBtn'));
 
     /* confirm() is blocked inside the artifact page, so confirm with a second tap */
     if(readonly){
@@ -896,6 +899,82 @@
     }
     document.getElementById('doneStrokes').onclick=function(){S.view='card';save();render();};
     window.scrollTo(0,0);
+  }
+
+  /* ---------- share ---------- */
+  var APP_URL='https://blaktee-hub.github.io/golf-scorecard/';
+  /* plain-text card for the group text — reads S (live round or the one being viewed) */
+  function shareText(){
+    var L=[];
+    var head=(S.course||'Golf')+'';
+    if(S.game==='wolf')head+=' · Wolf';
+    else if(S.game==='bestball')head+=' · Best Ball';
+    L.push(head);
+    L.push(prettyDate(S)+' · '+S.holes+' holes');
+    L.push('');
+
+    var i,pi;
+    if(S.game==='bestball'){
+      var teams=bbTeams();
+      for(i=0;i<teams.length;i++){
+        var mem=teams[i];
+        L.push('Team '+(i+1)+': '+mem.map(function(x){return S.players[x].name;}).join(' + '));
+        var g=teamBestSum(mem,0,S.holes,false),n=teamBestSum(mem,0,S.holes,true),v=teamVsSum(mem,0,S.holes);
+        var line='  best ball  gross '+(g==null?'-':g)+'  net '+(n==null?'-':n);
+        if(v!=null)line+='  ('+fmtVs(v)+')';
+        L.push(line);
+        for(var m=0;m<mem.length;m++){
+          var t0=totals(mem[m]);
+          L.push('   '+S.players[mem[m]].name+' '+(t0.thru?t0.strokes:'-'));
+        }
+        L.push('');
+      }
+    }else if(S.game==='wolf'){
+      var ord=[];
+      for(pi=0;pi<S.players.length;pi++)ord.push({n:S.players[pi].name,p:ptsSum(pi,0,S.holes)||0,s:totals(pi)});
+      ord.sort(function(a,b){return b.p-a.p;});
+      for(i=0;i<ord.length;i++){
+        L.push(ord[i].n+' — '+ord[i].p+' pt'+(ord[i].p===1?'':'s')+
+          (ord[i].s.thru?'  ('+ord[i].s.strokes+' strokes)':''));
+      }
+      L.push('');
+    }else{
+      for(pi=0;pi<S.players.length;pi++){
+        var t=totals(pi);
+        if(!t.thru){L.push(S.players[pi].name+' — no scores');continue;}
+        var row=S.players[pi].name+' — '+t.strokes;
+        if(S.coursePars&&t.thru===S.holes)row+=' ('+fmtVs(t.vs)+')';
+        if(S.holes===18){
+          var out=segSum(S.players[pi].scores,0,9),inn=segSum(S.players[pi].scores,9,18);
+          if(out!=null&&inn!=null)row+='   '+out+'/'+inn;
+        }
+        if(t.thru<S.holes)row+='  (thru '+t.thru+')';
+        L.push(row);
+      }
+      L.push('');
+    }
+    L.push(APP_URL);
+    return L.join('\n');
+  }
+  function wireShare(btn){
+    if(!btn)return;
+    btn.onclick=function(){
+      var txt=shareText();
+      var done=function(msg){
+        var old=btn.textContent;
+        btn.textContent=msg;
+        setTimeout(function(){if(btn.isConnected)btn.textContent=old;},1800);
+      };
+      if(navigator.share){
+        navigator.share({text:txt}).catch(function(){});   /* cancel is not an error */
+        return;
+      }
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(function(){done('Copied');},function(){done('Copy failed');});
+        return;
+      }
+      done('Not supported');
+    };
   }
 
   /* ---------- rounds (history) screen ---------- */
