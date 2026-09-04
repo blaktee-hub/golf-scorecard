@@ -182,6 +182,20 @@
   #pad.wolfmode .padgrid{display:none}
   #pad.wolfmode .wolfgrid{display:grid}
 
+  /* putts */
+  tr.puttrow td{background:var(--paper)}
+  tr.puttrow td.rowlbl{font-size:9px}
+  .putv{font-family:var(--hand);font-size:16px;color:var(--ink-lt)}
+  .putv.one{color:var(--under)}
+  .puttgrid{display:none;grid-template-columns:repeat(6,1fr);gap:7px}
+  .puttgrid button{
+    height:50px;font-family:var(--hand);font-size:22px;
+    background:#fff;border:1.5px solid var(--ink);border-radius:8px;color:var(--pencil);cursor:pointer;
+  }
+  .puttgrid button:active{background:var(--paper-dk)}
+  #pad.puttmode .padgrid{display:none}
+  #pad.puttmode .puttgrid{display:grid}
+
   /* best ball */
   .strdot{color:var(--under);font-size:11px;letter-spacing:-1px;vertical-align:top;font-weight:700}
   tr.teamrow td{background:var(--paper-dk)}
@@ -307,6 +321,7 @@
   <div class="padgrid" id="padnums"></div>
   <div class="tpgrid" id="padtp"></div>
   <div class="wolfgrid" id="padwolf"></div>
+  <div class="puttgrid" id="padputt"></div>
   <div class="padrow">
     <button id="padclear">Erase</button>
     <button id="paddone">Close</button>
@@ -391,6 +406,7 @@
       if(!p.topar)p.topar=p.scores.map(function(){return null;});
       if(!p.net)p.net=p.scores.map(function(){return null;});
       if(!p.strokes)p.strokes=p.scores.map(function(){return 0;});
+      if(!p.putts)p.putts=p.scores.map(function(){return null;});
     });
     if(!st.wolfPick)st.wolfPick=st.players[0].scores.map(function(){return null;});
     return st;
@@ -542,6 +558,8 @@
             '<div class="seg"><button id="h9">9</button><button id="h18" class="on">18</button></div></div>'+
           '<div><label>Game</label>'+
             '<div class="seg"><button id="g0" class="on">None</button><button id="g1">Wolf</button><button id="g2">BB</button></div></div>'+
+          '<div><label>Putts</label>'+
+            '<div class="seg"><button id="pu0" class="on">Off</button><button id="pu1">Track</button></div></div>'+
         '</div>'+
         '<button class="primary" id="startBtn">Tee Off</button>'+resume+
         (HISTORY.length?'<button class="resume" id="histBtn">Rounds ('+HISTORY.length+')</button>':'')+
@@ -585,6 +603,15 @@
       };
     }
     gameSeg('g0',null);gameSeg('g1','wolf');gameSeg('g2','bestball');
+    var trackPutts=false;
+    function puttSeg(id,val){
+      document.getElementById(id).onclick=function(){
+        trackPutts=val;
+        ['pu0','pu1'].forEach(function(g){document.getElementById(g).classList.remove('on');});
+        this.classList.add('on');
+      };
+    }
+    puttSeg('pu0',false);puttSeg('pu1',true);
     document.getElementById('startBtn').onclick=function(){
       var names=[];
       for(var i=0;i<6;i++){var v=document.getElementById('pn'+i).value.trim();if(v)names.push(v);}
@@ -596,13 +623,15 @@
          coursePars:known?known.pars.slice(0,holes):null,
          date:(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear(),
          game:game,
+         putts:trackPutts,
          wolfPick:Array.apply(null,Array(holes)).map(function(){return null;}),
          players:names.map(function(n){return{
            name:n,
            scores:Array.apply(null,Array(holes)).map(function(){return null;}),
            topar:Array.apply(null,Array(holes)).map(function(){return null;}),
            net:Array.apply(null,Array(holes)).map(function(){return null;}),
-           strokes:Array.apply(null,Array(holes)).map(function(){return 0;})
+           strokes:Array.apply(null,Array(holes)).map(function(){return 0;}),
+           putts:Array.apply(null,Array(holes)).map(function(){return null;})
          };})};
       if(game==='bestball')S.view='strokes';
       save();render();
@@ -671,6 +700,7 @@
           rows+='<td class="sumcell">'+(bnt==null?'':'<span class="tp">'+bnt+'</span>')+'</td>';
         }
         rows+='</tr>';
+        if(S.putts)rows+=puttsRow(pi,from,to,withTotal);
         /* team best-ball rows after each pair */
         if(pi%2===1||pi===S.players.length-1){
           var ti=Math.floor(pi/2),mem=bbTeams()[ti];
@@ -718,6 +748,7 @@
           rows+='<td class="sumcell">'+(pst==null?'':'<span class="ptv">'+pst+'</span>')+'</td>';
         }
         rows+='</tr>';
+        if(S.putts)rows+=puttsRow(pi,from,to,withTotal);
       }else{
         /* to-par row — auto-computed when the course is known, otherwise tappable */
         rows+='<tr class="topar"><td class="rowlbl">+/&minus;</td>';
@@ -735,9 +766,27 @@
           rows+='<td class="sumcell">'+(tv==null?'':'<span class="tp '+(tv<0?'u':'')+'">'+fmtVs(tv)+'</span>')+'</td>';
         }
         rows+='</tr>';
+        if(S.putts)rows+=puttsRow(pi,from,to,withTotal);
       }
     }
     return'<div class="gridwrap"><table class="sc"><colgroup>'+cols+'</colgroup>'+head+parRow+rows+'</table></div>';
+  }
+  /* putts row — only rendered when the round is tracking putts */
+  function puttsRow(pi,from,to,withTotal){
+    var p=S.players[pi];
+    var r='<tr class="puttrow"><td class="rowlbl">Putts</td>';
+    for(var h=from;h<to;h++){
+      var v=p.putts[h];
+      r+='<td class="scell'+selCls('putt',pi,h)+'" data-kind="putt" data-p="'+pi+'" data-h="'+h+'">'+
+        (v==null?'':'<span class="putv'+(v<=1?' one':'')+'">'+v+'</span>')+'</td>';
+    }
+    var ps=segSum(p.putts,from,to);
+    r+='<td class="sumcell">'+(ps==null?'':'<span class="putv">'+ps+'</span>')+'</td>';
+    if(withTotal){
+      var pt=segSum(p.putts,0,S.holes);
+      r+='<td class="sumcell">'+(pt==null?'':'<span class="putv">'+pt+'</span>')+'</td>';
+    }
+    return r+'</tr>';
   }
   function selCls(kind,pi,h){
     return(sel&&sel.kind===kind&&sel.pi===pi&&sel.h===h)?' sel':'';
@@ -909,6 +958,7 @@
     var head=(S.course||'Golf')+'';
     if(S.game==='wolf')head+=' · Wolf';
     else if(S.game==='bestball')head+=' · Best Ball';
+    if(S.putts)head+=' · Putts';
     L.push(head);
     L.push(prettyDate(S)+' · '+S.holes+' holes');
     L.push('');
@@ -952,6 +1002,14 @@
         L.push(row);
       }
       L.push('');
+    }
+    if(S.putts){
+      var pl=[];
+      for(var pq=0;pq<S.players.length;pq++){
+        var pv=segSum(S.players[pq].putts,0,S.holes);
+        if(pv!=null)pl.push(S.players[pq].name+' '+pv);
+      }
+      if(pl.length){L.push('Putts — '+pl.join(' · '));L.push('');}
     }
     L.push(APP_URL);
     return L.join('\n');
@@ -1005,11 +1063,18 @@
       var who='';
       for(var pi=0;pi<r.players.length;pi++){
         var t=roundTotals(r,pi);
+        var hput=null;
+        if(r.putts&&r.players[pi].putts){
+          hput=0;var hany=false;
+          for(var hq=0;hq<r.holes;hq++)if(r.players[pi].putts[hq]!=null){hput+=r.players[pi].putts[hq];hany=true;}
+          if(!hany)hput=null;
+        }
         who+='<div class="hp"><span class="hpn">'+esc(r.players[pi].name)+'</span>'+
           '<span class="hps">'+(t.thru?t.strokes:'&mdash;')+
-          (t.vs!=null&&t.thru?' <em class="'+(t.vs<0?'u':'')+'">'+fmtVs(t.vs)+'</em>':'')+'</span></div>';
+          (t.vs!=null&&t.thru?' <em class="'+(t.vs<0?'u':'')+'">'+fmtVs(t.vs)+'</em>':'')+
+          (hput!=null?' <em>'+hput+' putts</em>':'')+'</span></div>';
       }
-      var badge=r.game==='wolf'?'Wolf':r.game==='bestball'?'Best Ball':'';
+      var badge=r.game==='wolf'?'Wolf':r.game==='bestball'?'Best Ball':(r.putts?'Putts':'');
       rows+='<div class="hrow">'+
         '<button class="hmain" data-i="'+i+'">'+
           '<div class="htop"><span class="hc">'+esc(r.course||'Round')+'</span>'+
@@ -1131,6 +1196,7 @@
     var base=esc(S.players[sel.pi].name)+' &mdash; Hole '+(sel.h+1);
     if(sel.kind==='topar')return base+' &middot; Score to par';
     if(sel.kind==='net')return base+' &middot; Net score';
+    if(sel.kind==='putt')return base+' &middot; Putts';
     return base+' &middot; Strokes';
   }
   function buildWolfGrid(){
@@ -1158,6 +1224,7 @@
     document.getElementById('padctx').innerHTML=padCtx();
     pad.classList.toggle('tpmode',sel.kind==='topar');
     pad.classList.toggle('wolfmode',sel.kind==='wolfhead');
+    pad.classList.toggle('puttmode',sel.kind==='putt');
     if(sel.kind==='wolfhead')buildWolfGrid();
     pad.classList.add('open');pad.setAttribute('aria-hidden','false');
   }
@@ -1195,6 +1262,17 @@
         save();closePad();render();
       };
     }
+    var pg=document.getElementById('padputt'),pghtml='';
+    for(var q=0;q<=5;q++)pghtml+='<button data-q="'+q+'">'+q+'</button>';
+    pg.innerHTML=pghtml;
+    var pgbtns=pg.querySelectorAll('button');
+    for(var g=0;g<pgbtns.length;g++){
+      pgbtns[g].onclick=function(){
+        if(!sel||sel.kind!=='putt')return;
+        S.players[sel.pi].putts[sel.h]=parseInt(this.getAttribute('data-q'),10);
+        save();closePad();render();
+      };
+    }
     document.getElementById('padclear').onclick=function(){
       if(!sel)return;
       if(sel.kind==='score'){
@@ -1202,6 +1280,7 @@
         if(S.coursePars)S.players[sel.pi].topar[sel.h]=null;
       }
       else if(sel.kind==='net')S.players[sel.pi].net[sel.h]=null;
+      else if(sel.kind==='putt')S.players[sel.pi].putts[sel.h]=null;
       else if(sel.kind==='wolfhead')S.wolfPick[sel.h]=null;
       else S.players[sel.pi].topar[sel.h]=null;
       save();closePad();render();
