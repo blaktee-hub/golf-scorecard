@@ -1230,12 +1230,7 @@
     if(sel.kind==='wolfhead')buildWolfGrid();
     pad.classList.add('open');pad.setAttribute('aria-hidden','false');
   }
-  /* light haptic tick in the iOS app (Capacitor); no-op on the web */
-  function tick(){
-    try{var H=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Haptics;if(H)H.impact({style:'LIGHT'});}catch(e){}
-  }
   function closePad(){
-    tick();
     pad.classList.remove('open');pad.setAttribute('aria-hidden','true');sel=null;
   }
   (function buildPad(){
