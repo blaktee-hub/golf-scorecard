@@ -121,7 +121,6 @@
   .chips button.del{border-color:var(--under);color:var(--under);border-style:solid}
   .chips button.locked{opacity:.35}
   .chips button.addc{font-size:16px;font-weight:700;padding:6px 12px;line-height:1}
-  .chips button.addfirst{font-weight:700;border-style:dashed;padding:8px 14px}
   .chips button.delon{background:var(--under);border-color:var(--under);color:var(--paper)}
   .delhint{font-family:var(--print);font-style:italic;font-size:12px;color:var(--under);margin:6px 2px 0}
   /* rounds (history) screen */
@@ -338,16 +337,8 @@
   var delMode=false;        /* remove-a-course mode on the setup screen */
   var builder=null;         /* {name, pars[18]} while building a course */
 
-  /* STORE = the paid App Store build (Capacitor wrapper), or ?store=1 to preview it
-     in a browser. The store build ships with NO preset courses — golfers add their own. */
-  var STORE=(function(){
-    try{
-      if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())return true;
-      return /[?&]store=1\b/.test(location.search);
-    }catch(e){return false;}
-  })();
   /* hole-by-hole pars from the official City of Idaho Falls scorecards (golfif.com) */
-  var BUILT_IN=STORE?[]:[
+  var BUILT_IN=[
     {name:'Sand Creek',      pars:[4,5,4,4,4,5,3,4,3, 4,5,4,3,4,4,3,4,5]},
     {name:'Pinecrest',       pars:[4,4,5,4,3,5,3,4,4, 3,5,3,4,4,4,3,4,4]},
     {name:'Sage Lakes',      pars:[4,4,3,4,4,3,5,3,5, 5,4,3,4,3,4,5,3,4]},
@@ -552,17 +543,14 @@
           '<div class="club">Official Scorecard</div>'+
         '</div>'+
         '<label>Course</label>'+
-        '<input type="text" id="course" maxlength="30" placeholder="'+
-          (allCourses().length?'Type a course, or tap one below':'Course name (optional)')+'">'+
+        '<input type="text" id="course" maxlength="30" placeholder="Type a course, or tap one below">'+
         '<div class="chips">'+
           allCourses().map(function(c,i){
             var mine=i>=BUILT_IN.length;
             return'<button data-ci="'+i+'" class="'+(mine?'mine':'')+(delMode&&mine?' del':'')+
               (delMode&&!mine?' locked':'')+'">'+esc(c.name)+(delMode&&mine?' &times;':'')+'</button>';
           }).join('')+
-          (allCourses().length
-            ?'<button class="addc" id="addCourse">+</button>'
-            :'<button class="addfirst" id="addCourse">+ Add your course</button>')+
+          '<button class="addc" id="addCourse">+</button>'+
           (MYCOURSES.length?'<button class="addc'+(delMode?' delon':'')+'" id="delCourse">&minus;</button>':'')+
         '</div>'+
         (delMode?'<p class="delhint">Tap one of your own courses to remove it.</p>':'')+
@@ -578,7 +566,7 @@
         '<button class="primary" id="startBtn">Tee Off</button>'+resume+
         (HISTORY.length?'<button class="resume" id="histBtn">Rounds ('+HISTORY.length+')</button>':'')+
       '</div>'+
-      (STORE?'':'<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>');
+      '<p class="hint">To keep this on your phone: open the Share menu in Safari and tap &ldquo;Add to Home Screen.&rdquo;</p>';
     app.style.paddingBottom='10px';
 
     var chipBtns=app.querySelectorAll('.chips button[data-ci]');
@@ -1025,7 +1013,7 @@
       }
       if(pl.length){L.push('Putts — '+pl.join(' · '));L.push('');}
     }
-    if(!STORE)L.push(APP_URL);  /* store build: don't advertise the free web version */
+    L.push(APP_URL);
     return L.join('\n');
   }
   function wireShare(btn){
